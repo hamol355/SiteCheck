@@ -5,6 +5,39 @@ import type { PageResult } from './pages.js';
 const COUNTED: ReadonlySet<Status> = new Set(['pass', 'warn', 'fail']);
 
 /**
+ * What a passing per-page check means, for the aggregated message. The pages' own pass messages
+ * describe one page (e.g. "Canonical URL is …"), so they cannot stand for all of them.
+ */
+export const PASS_SUMMARIES: Readonly<Record<string, string>> = {
+  title: 'Title length is within limits',
+  'meta-description': 'Meta description length is within limits',
+  h1: 'Exactly one <h1>',
+  'canonical-url': 'Canonical URL is set',
+  'viewport-meta': 'Viewport meta tag is set',
+  'html-lang': 'Document language is set',
+  'image-alt': 'Images have alt attributes',
+  'heading-structure': 'Heading levels are in order',
+  'link-name': 'Links have accessible names',
+  'button-name': 'Buttons have accessible names',
+  'form-label': 'Form fields have labels',
+  'iframe-title': 'Iframes have a title',
+  landmarks: 'One main landmark',
+  'aria-valid': 'ARIA usage is valid',
+  'zoom-allowed': 'Zooming is allowed',
+  tabindex: 'No positive tabindex values',
+  'meta-refresh': 'No delayed meta refresh',
+  'table-headers': 'Data tables have headers',
+  autocomplete: 'Personal data fields have autocomplete',
+  'media-autoplay': 'No autoplaying media with sound',
+};
+
+/** E.g. "Exactly one <h1> on all 6 pages"; unknown ids fall back to "Passes on all 6 pages". */
+function passMessage(id: string, n: number): string {
+  const summary = PASS_SUMMARIES[id];
+  return summary === undefined ? `Passes on all ${n} pages` : `${summary} on all ${n} pages`;
+}
+
+/**
  * Merges one check's results from several pages into one result, so scoring and `checks` in the
  * report stay one entry per check id:
  * - points: mean of the counted pages' points, rounded down (points stay integers);
@@ -26,7 +59,7 @@ export function aggregateCheck(results: CheckResult[]): CheckResult {
   delete base.remediation;
 
   if (affected.length === 0) {
-    return { ...base, status: 'pass', message: `Passes on all ${n} pages`, points };
+    return { ...base, status: 'pass', message: passMessage(base.id, n), points };
   }
   const status: Status = failing.length > n / 2 ? 'fail' : 'warn';
   // Describe the worst case: the first failing page, otherwise the first warning one.
