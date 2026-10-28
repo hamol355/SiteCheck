@@ -161,3 +161,37 @@ describe('renderJson', () => {
     ]);
   });
 });
+
+describe('renderTerminal with several pages', () => {
+  const page = (n: number, status: 'pass' | 'fail') => ({
+    url: `https://example.com/p${n}`,
+    status: 200,
+    checks: [{ id: 'h1', status, message: 'h1' }],
+  });
+  const multi: Report = {
+    ...report,
+    pages: [
+      page(0, 'pass'),
+      page(1, 'fail'),
+      page(2, 'fail'),
+      page(3, 'fail'),
+      page(4, 'fail'),
+      { url: 'https://example.com/gone', status: null, skipped: 'Timed out', checks: [] },
+    ],
+    meta: { ...report.meta, pagesAnalyzed: 5 },
+  };
+
+  it('lists the first three affected URLs, a remainder and skipped pages', () => {
+    const out = renderTerminal(multi);
+    expect(out).toContain('Pages analysed: 5 (1 skipped)');
+    expect(out).toContain('https://example.com/gone: Timed out');
+    expect(out).toContain('    https://example.com/p1\n');
+    expect(out).toContain('    https://example.com/p3\n');
+    expect(out).not.toContain('    https://example.com/p4\n');
+    expect(out).toContain('    +1 more');
+  });
+
+  it('prints no page section for a single-page report', () => {
+    expect(renderTerminal(report)).not.toContain('Pages analysed');
+  });
+});

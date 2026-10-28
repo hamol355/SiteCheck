@@ -387,8 +387,8 @@ Branch: `feature/sitemap-reader`, därefter `feature/multi-page`. Kan göras fö
 - [x] `samplePages()`: deterministiskt urval grupperat på path-segment
 - [x] Refaktorera `analyze()`: `analyzePage()` för per-sida-kontroller, orkestrering med samtidighetstak 4 (`src/pages.ts`)
 - [x] `aggregate.ts` + `pages`/`meta.pagesAnalyzed` i `Report`
-- [ ] CLI: `--pages <n>` (validering, exit 2), stderr-notis när sitemap saknas, terminal visar berörda URL:er
-- [ ] Tester: sitemap-parser (index, gzip, zip-bomb, andra hosts), urval, aggregering (alla pass / blandat / alla fail / skippade), integrationstest mot testserver med 3 sidor och en blockerad sida
+- [x] CLI: `--pages <n>` (validering, exit 2), stderr-notis när sitemap saknas, terminal visar berörda URL:er
+- [x] Tester: sitemap-parser (index, gzip, zip-bomb, andra hosts), urval, aggregering (alla pass / blandat / alla fail / skippade), integrationstest mot testserver med 3 sidor och en blockerad sida
 
 Klart när: `sitecheck <url> --pages 10` analyserar flera sidor, och `--pages 1` ger samma rapport som idag.
 

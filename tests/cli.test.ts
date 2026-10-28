@@ -132,11 +132,40 @@ describe('usage errors (exit 2)', () => {
     ['negative min-score', ['example.com', '--min-score', '-1']],
     ['fractional min-score', ['example.com', '--min-score', '1.5']],
     ['unknown option', ['example.com', '--nope']],
+    ['zero pages', ['example.com', '--pages', '0']],
+    ['too many pages', ['example.com', '--pages', '51']],
+    ['non-numeric pages', ['example.com', '--pages', 'abc']],
+    ['fractional pages', ['example.com', '--pages', '2.5']],
   ])('%s', async (_name, args) => {
     const r = await run(args);
     expect(r.code).toBe(EXIT_USAGE);
     expect(r.stdout).toBe('');
     expect(r.stderr).not.toBe('');
+  });
+});
+
+describe('--pages', () => {
+  it('passes the page count and routes notices to stderr', async () => {
+    let received: { pages?: number } | undefined;
+    const analyze: Parameters<typeof main>[2] = async (url, options) => {
+      received = options;
+      options?.onNotice?.('No sitemap found');
+      return defaultAnalyze(url);
+    };
+    const r = await run([server.url, '--pages', '5'], { analyze });
+    expect(r.code).toBe(EXIT_OK);
+    expect(received?.pages).toBe(5);
+    expect(r.stderr).toBe('Notice: No sitemap found\n');
+  });
+
+  it('defaults to one page', async () => {
+    let received: { pages?: number } | undefined;
+    const analyze: Parameters<typeof main>[2] = (url, options) => {
+      received = options;
+      return defaultAnalyze(url);
+    };
+    await run([server.url], { analyze });
+    expect(received?.pages).toBe(1);
   });
 });
 

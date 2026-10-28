@@ -1,6 +1,6 @@
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { BLOCK_HINT } from '../checks/blocked.js';
-import { analyze as defaultAnalyze, BlockedError } from '../index.js';
+import { analyze as defaultAnalyze, BlockedError, MAX_PAGES } from '../index.js';
 import { renderJson } from '../output/json.js';
 import { renderTerminal, shouldUseColor } from '../output/terminal.js';
 import { escapeControlChars } from '../text.js';
@@ -20,6 +20,7 @@ type Analyze = typeof defaultAnalyze;
 interface CliOptions {
   format: 'text' | 'json';
   minScore?: number;
+  pages: number;
 }
 
 /** Error messages can quote server data (e.g. a Location header), so control characters are escaped. */
@@ -34,6 +35,13 @@ function reportError(io: Io, prefix: string, err: unknown): void {
 function parseMinScore(value: string): number {
   if (!/^\d+$/.test(value) || Number(value) > 100) {
     throw new InvalidArgumentError('Must be an integer from 0 to 100.');
+  }
+  return Number(value);
+}
+
+function parsePages(value: string): number {
+  if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > MAX_PAGES) {
+    throw new InvalidArgumentError(`Must be an integer from 1 to ${MAX_PAGES}.`);
   }
   return Number(value);
 }
@@ -57,7 +65,10 @@ async function execute(
 
   let report;
   try {
-    report = await analyze(url, { onNotice: (message) => io.stderr(`Notice: ${message}\n`) });
+    report = await analyze(url, {
+      pages: options.pages,
+      onNotice: (message) => io.stderr(`Notice: ${escapeControlChars(message)}\n`),
+    });
   } catch (err) {
     if (err instanceof BlockedError) {
       io.stderr(`Access not allowed: ${err.message}\n${BLOCK_HINT}\n`);
@@ -103,6 +114,7 @@ export async function main(
       new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'),
     )
     .option('--min-score <n>', 'exit with code 1 if the score is below n (0-100)', parseMinScore)
+    .option('--pages <n>', `analyse up to n pages from the sitemap (1-${MAX_PAGES})`, parsePages, 1)
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr })
     .exitOverride()
     .action(async (url: string, options: CliOptions) => {
