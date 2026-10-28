@@ -72,9 +72,8 @@ function decoderFor(contentType: string | null): TextDecoder {
 async function readCapped(
   body: ReadableStream<Uint8Array> | null,
   maxBytes: number,
-  decoder: TextDecoder,
-): Promise<{ text: string; truncated: boolean }> {
-  if (!body) return { text: '', truncated: false };
+): Promise<{ bytes: Buffer; truncated: boolean }> {
+  if (!body) return { bytes: Buffer.alloc(0), truncated: false };
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -95,20 +94,25 @@ async function readCapped(
   } finally {
     if (truncated) await reader.cancel().catch(() => undefined);
   }
-  return { text: decoder.decode(Buffer.concat(chunks)), truncated };
+  return { bytes: Buffer.concat(chunks), truncated };
+}
+
+interface RawResponse extends Omit<FetchedPage, 'html' | 'truncated'> {
+  /** Raw body, capped at `maxBodyBytes`; null when `shouldRead` rejected the content-type. */
+  body: Buffer | null;
+  truncated: boolean;
 }
 
 /**
  * Follows redirects manually (http/https only) and reads the body if `shouldRead` accepts the
- * content-type. The timeout covers the whole call, including body reading. The body is returned
- * in `html` (null when not read).
+ * content-type. The timeout covers the whole call, including body reading.
  */
 async function fetchResource(
   url: string,
   options: FetchOptions,
   shouldRead: (contentType: string | null) => boolean,
   accept: string,
-): Promise<FetchedPage> {
+): Promise<RawResponse> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -165,16 +169,12 @@ async function fetchResource(
         headers[name.toLowerCase()] = value;
       });
 
-      let html: string | null = null;
+      let body: Buffer | null = null;
       let truncated = false;
       const contentType = response.headers.get('content-type');
       if (shouldRead(contentType)) {
         try {
-          ({ text: html, truncated } = await readCapped(
-            response.body,
-            maxBodyBytes,
-            decoderFor(contentType),
-          ));
+          ({ bytes: body, truncated } = await readCapped(response.body, maxBodyBytes));
         } catch (err) {
           throw toFetchError(err, current, controller.signal, timeoutMs);
         }
@@ -187,7 +187,7 @@ async function fetchResource(
         finalUrl: current,
         status: response.status,
         headers,
-        html,
+        body,
         truncated,
         responseTimeMs,
         redirects,
@@ -199,8 +199,15 @@ async function fetchResource(
 }
 
 /** Fetches a page, following up to `maxRedirects` redirects. Only HTML bodies are read. */
-export function fetchPage(url: string, options: FetchOptions = {}): Promise<FetchedPage> {
-  return fetchResource(url, options, isHtml, 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8');
+export async function fetchPage(url: string, options: FetchOptions = {}): Promise<FetchedPage> {
+  const { body, ...page } = await fetchResource(
+    url,
+    options,
+    isHtml,
+    'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+  );
+  const html = body && decoderFor(page.headers['content-type'] ?? null).decode(body);
+  return { ...page, html };
 }
 
 export const PROBE_TIMEOUT_MS = 5_000;
@@ -220,14 +227,49 @@ export async function fetchText(url: string, options: FetchOptions = {}): Promis
       () => true,
       '*/*',
     );
+    const contentType = page.headers['content-type'] ?? null;
     return {
       url: page.finalUrl,
       status: page.status,
-      contentType: page.headers['content-type'] ?? null,
-      body: page.html ?? '',
+      contentType,
+      body: page.body ? decoderFor(contentType).decode(page.body) : '',
     };
   } catch {
     return { url, status: null, contentType: null, body: '' };
+  }
+}
+
+export interface BytesResponse {
+  url: string;
+  status: number | null;
+  contentType: string | null;
+  /** Raw body (not decoded, so gzip survives), capped at `maxBodyBytes`. */
+  bytes: Buffer;
+  truncated: boolean;
+}
+
+/** Fetches a resource of any content-type as raw bytes (e.g. a gzipped sitemap). Never throws. */
+export async function fetchBytes(url: string, options: FetchOptions = {}): Promise<BytesResponse> {
+  try {
+    const res = await fetchResource(
+      url,
+      {
+        timeoutMs: options.timeoutMs ?? TEXT_TIMEOUT_MS,
+        maxBodyBytes: options.maxBodyBytes ?? TEXT_MAX_BODY_BYTES,
+        ...(options.maxRedirects !== undefined && { maxRedirects: options.maxRedirects }),
+      },
+      () => true,
+      '*/*',
+    );
+    return {
+      url: res.finalUrl,
+      status: res.status,
+      contentType: res.headers['content-type'] ?? null,
+      bytes: res.body ?? Buffer.alloc(0),
+      truncated: res.truncated,
+    };
+  } catch {
+    return { url, status: null, contentType: null, bytes: Buffer.alloc(0), truncated: false };
   }
 }
 

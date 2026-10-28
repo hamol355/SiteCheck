@@ -219,7 +219,7 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 - **Filtrering:** endast samma origin som slutlig startsida, endast `http:`/`https:`, deduplicerat, filändelser som inte är HTML (pdf, bilder …) bort, och URL:er som `robots.txt` inte tillåter bort. Utan same-origin-filtret kunde en elak sitemap få SiteCheck att anropa godtyckliga hosts (SSRF).
 - **Sitemap-filerna själva** får ligga på annan host (vanligt med CDN; `sitemap-xml` följer redan `Sitemap:`-direktivet dit), men bara `http:`/`https:` och bara URL:er från robots.txt eller ett `<sitemapindex>`. Same-origin-kravet gäller sidorna som analyseras. När SSRF-skyddet läggs till (REST API) gäller det även sitemap-anropen, eftersom allt går via `net/http.ts`.
 - **www / icke-www** räknas som olika origin (ingen gissning). Filtreras alla sitemap-URL:er bort skrivs en notis på stderr ("Sitemap has no URLs on <origin>; analysing the start page only") och bara startsidan analyseras.
-- **Urval:** startsidan alltid med; resten deterministiskt utspritt, grupperat på första path-segmentet så att olika mallar (blogg, produkt …) täcks. Samma indata ger samma urval.
+- **Urval:** startsidan alltid med; resten deterministiskt utspritt, grupperat på första path-segmentet så att olika mallar (blogg, produkt …) täcks. Sidor på toppnivå (`/about`, `/mitt-inlagg/`) delar en grupp, så att en platt sajt samplas utspritt i stället för alfabetiskt först. Samma indata ger samma urval.
 - **Hämtning:** `fetchPage` per sida, max 4 samtidiga. Misslyckad, blockerad eller icke-HTML-sida blir `skipped` med orsak och avbryter inte körningen. Redirect som leder utanför origin → hoppas över.
 - **Vilka kontroller:** per sida kör `accessibility` och sid-kontrollerna i `seo` (`title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`). Per sajt, bara på startsidan: `availability`, `security`, `robots-txt`, `sitemap-xml`.
 - **Aggregering** (`aggregate.ts`) ger ett resultat per check-id så att scoring och `checks` i JSON är oförändrade: poäng = medelvärdet av sidornas poäng avrundat nedåt till heltal (`Math.floor`, samma riktning som `warn` = hälften nedåt; `points` förblir heltal); status `pass` om alla sidor passerar, `fail` om fler än hälften failar, annars `warn`. Status och poäng räknas oberoende av varandra – status är en sammanfattning för läsaren, poängen styr scoring – så t.ex. 5 pass + 5 fail ger `warn` med halva poängen; meddelande t.ex. "3 of 10 pages: images missing alt attributes". Detaljerna per sida ligger i det nya valfria fältet `pages` (additivt, `schemaVersion` förblir 1). `skip` sidor räknas inte.
@@ -380,9 +380,9 @@ Klart när: rapporten har en accessibility-sektion med WCAG-referenser, och `npm
 
 Branch: `feature/sitemap-reader`, därefter `feature/multi-page`. Kan göras före M7.
 
-- [ ] `net/http.ts`: `fetchBytes()` (rå `Buffer` + `truncated`) + tester
-- [ ] `net/sitemap.ts`: parsning av urlset/sitemapindex, gzip med storlekstak, tak på antal sitemaps och URL:er, same-origin-filter, robots.txt-filter (se 5d)
-- [ ] `samplePages()`: deterministiskt urval grupperat på path-segment
+- [x] `net/http.ts`: `fetchBytes()` (rå `Buffer` + `truncated`) + tester
+- [x] `net/sitemap.ts`: parsning av urlset/sitemapindex, gzip med storlekstak, tak på antal sitemaps och URL:er, same-origin-filter, robots.txt-filter (se 5d)
+- [x] `samplePages()`: deterministiskt urval grupperat på path-segment
 - [ ] Refaktorera `analyze()`: `analyzePage()` för per-sida-kontroller, orkestrering med samtidighetstak 4
 - [ ] `aggregate.ts` + `pages`/`meta.pagesAnalyzed` i `Report`
 - [ ] CLI: `--pages <n>` (validering, exit 2), stderr-notis när sitemap saknas, terminal visar berörda URL:er
