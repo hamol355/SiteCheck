@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateCheck, aggregatePages } from '../src/aggregate.js';
+import { aggregateCheck, aggregatePages, PASS_SUMMARIES } from '../src/aggregate.js';
 import type { CheckResult, Status } from '../src/checks/types.js';
-import type { PageResult } from '../src/pages.js';
+import { analyzePage, type PageResult } from '../src/pages.js';
 
 const POINTS: Record<Status, number> = { pass: 6, warn: 3, fail: 0, error: 0, skip: 0 };
 
@@ -30,9 +30,24 @@ describe('aggregateCheck', () => {
 
   it('passes when all pages pass, without remediation', () => {
     const out = aggregateCheck(many('pass', 3));
-    expect(out).toMatchObject({ status: 'pass', points: 6, message: 'Passes on all 3 pages' });
+    expect(out).toMatchObject({
+      status: 'pass',
+      points: 6,
+      message: 'Images have alt attributes on all 3 pages',
+    });
     expect(out.remediation).toBeUndefined();
     expect(out.wcag).toEqual(['1.1.1']);
+  });
+
+  it('names the check in the pass message, with a fallback for unknown ids', () => {
+    const pass = (id: string) => [result('pass', 'm', id), result('pass', 'm', id)];
+    expect(aggregateCheck(pass('h1')).message).toBe('Exactly one <h1> on all 2 pages');
+    expect(aggregateCheck(pass('unknown-check')).message).toBe('Passes on all 2 pages');
+  });
+
+  it('has a pass summary for every per-page check', () => {
+    const ids = analyzePage({ html: '<html></html>', status: 200 }).map((c) => c.id);
+    expect(ids.filter((id) => PASS_SUMMARIES[id] === undefined)).toEqual([]);
   });
 
   it('fails when all pages fail', () => {
@@ -71,7 +86,10 @@ describe('aggregateCheck', () => {
 
   it('ignores error and skip results', () => {
     const out = aggregateCheck([result('error'), ...many('pass', 2), result('skip')]);
-    expect(out).toMatchObject({ status: 'pass', message: 'Passes on all 2 pages' });
+    expect(out).toMatchObject({
+      status: 'pass',
+      message: 'Images have alt attributes on all 2 pages',
+    });
   });
 
   it('falls back to the first result when nothing counts', () => {

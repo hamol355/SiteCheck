@@ -25,11 +25,21 @@ const COLORS: Record<Status, string> = {
   skip: '\x1b[2m',
 };
 const RESET = '\x1b[0m';
+const MAX_LISTED_URLS = 3;
 const RULE = '─'.repeat(40);
 
 /** Color only for a TTY, and never when NO_COLOR is set to a non-empty value (no-color.org). */
 export function shouldUseColor(env: Record<string, string | undefined>, isTTY: boolean): boolean {
   return isTTY && !env['NO_COLOR'];
+}
+
+/** URLs of the pages where a check did not pass; empty unless several pages were analysed. */
+function affectedUrls(report: Report, id: string): string[] {
+  return (report.pages ?? [])
+    .filter((p) =>
+      p.checks.some((c) => c.id === id && (c.status === 'warn' || c.status === 'fail')),
+    )
+    .map((p) => p.url);
 }
 
 export function renderTerminal(report: Report, options: { color?: boolean } = {}): string {
@@ -40,6 +50,17 @@ export function renderTerminal(report: Report, options: { color?: boolean } = {}
   if (report.finalUrl !== report.url) lines.push(`Final URL: ${report.finalUrl}`);
   if (report.meta.truncated) {
     lines.push('Note: the page exceeded the size limit; only its beginning was analysed.');
+  }
+
+  if (report.pages) {
+    const skipped = report.pages.filter((p) => p.skipped !== undefined);
+    lines.push(
+      `Pages analysed: ${report.meta.pagesAnalyzed}` +
+        (skipped.length > 0 ? ` (${skipped.length} skipped)` : ''),
+    );
+    for (const p of skipped) {
+      lines.push(`  – ${escapeControlChars(p.url)}: ${escapeControlChars(p.skipped ?? '')}`);
+    }
   }
 
   for (const category of Object.keys(CATEGORY_TITLES) as Category[]) {
@@ -56,6 +77,15 @@ export function renderTerminal(report: Report, options: { color?: boolean } = {}
       );
       if (check.remediation && check.status !== 'pass') {
         lines.push(`    → ${escapeControlChars(check.remediation)}`);
+      }
+      if (check.status !== 'pass') {
+        const urls = affectedUrls(report, check.id);
+        for (const url of urls.slice(0, MAX_LISTED_URLS)) {
+          lines.push(`    ${escapeControlChars(url)}`);
+        }
+        if (urls.length > MAX_LISTED_URLS) {
+          lines.push(`    +${urls.length - MAX_LISTED_URLS} more`);
+        }
       }
     }
   }

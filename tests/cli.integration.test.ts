@@ -58,6 +58,18 @@ beforeAll(async () => {
       status: 403,
       body: '<html><head><title>Just a moment...</title></head></html>',
     },
+    '/multi/': { body: fixture('good.html'), headers: goodHeaders },
+    '/multi/a': { body: fixture('good.html'), headers: goodHeaders },
+    '/multi/b': { body: fixture('bad.html') },
+    '/multi/blocked': { status: 403, body: '<p>Forbidden</p>' },
+    '/sitemap.xml': (req, res) => {
+      const origin = `http://${req.headers.host}`;
+      const locs = ['/multi/a', '/multi/b', '/multi/blocked'].map(
+        (path) => `<url><loc>${origin}${path}</loc></url>`,
+      );
+      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.end(`<urlset>${locs.join('')}</urlset>`);
+    },
     '/server-error': { status: 500, body: '<p>Oops</p>' },
   });
 }, 60_000);
@@ -170,6 +182,37 @@ describe('built CLI', () => {
     expect(r.code).toBe(EXIT_BELOW_MIN_SCORE);
     expect(r.stderr).toMatch(/below the minimum of 100/);
     expect(() => JSON.parse(r.stdout)).not.toThrow();
+  });
+
+  it('analyses sitemap pages with --pages and skips a blocked one', async () => {
+    const r = await sitecheck([`${server.url}/multi/`, '--pages', '4', '--format', 'json']);
+    expect(r.code).toBe(EXIT_OK);
+    const report = JSON.parse(r.stdout) as Report;
+    expect(report.pages?.map((p) => p.url.replace(server.url, ''))).toEqual([
+      '/multi/',
+      '/multi/a',
+      '/multi/b',
+      '/multi/blocked',
+    ]);
+    expect(report.pages?.find((p) => p.url.endsWith('/blocked'))?.skipped).toBeTruthy();
+    expect(report.meta.pagesAnalyzed).toBe(3);
+
+    const text = await sitecheck([`${server.url}/multi/`, '--pages', '4']);
+    expect(text.stdout).toContain('Pages analysed: 3 (1 skipped)');
+    expect(text.stdout).toContain(`${server.url}/multi/b`);
+  });
+
+  it('gives the same report shape for --pages 1 as without the flag', async () => {
+    const r = await sitecheck([`${server.url}/good`, '--pages', '1', '--format', 'json']);
+    const report = JSON.parse(r.stdout) as Report;
+    expect(report.pages).toBeUndefined();
+    expect(report.meta.pagesAnalyzed).toBe(1);
+  });
+
+  it('exits 2 for --pages out of range', async () => {
+    const r = await sitecheck([`${server.url}/good`, '--pages', '51']);
+    expect(r.code).toBe(EXIT_USAGE);
+    expect(r.stdout).toBe('');
   });
 
   it('exits 3 on a redirect loop', async () => {
