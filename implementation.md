@@ -381,8 +381,8 @@ Klart när: rapporten har en accessibility-sektion med WCAG-referenser, och `npm
 Branch: `feature/sitemap-reader`, därefter `feature/multi-page`. Kan göras före M7.
 
 - [x] `net/http.ts`: `fetchBytes()` (rå `Buffer` + `truncated`) + tester
-- [ ] `net/sitemap.ts`: parsning av urlset/sitemapindex, gzip med storlekstak, tak på antal sitemaps och URL:er, same-origin-filter, robots.txt-filter (se 5d)
-- [ ] `samplePages()`: deterministiskt urval grupperat på path-segment
+- [x] `net/sitemap.ts`: parsning av urlset/sitemapindex, gzip med storlekstak, tak på antal sitemaps och URL:er, same-origin-filter, robots.txt-filter (se 5d)
+- [x] `samplePages()`: deterministiskt urval grupperat på path-segment
 - [ ] Refaktorera `analyze()`: `analyzePage()` för per-sida-kontroller, orkestrering med samtidighetstak 4
 - [ ] `aggregate.ts` + `pages`/`meta.pagesAnalyzed` i `Report`
 - [ ] CLI: `--pages <n>` (validering, exit 2), stderr-notis när sitemap saknas, terminal visar berörda URL:er
