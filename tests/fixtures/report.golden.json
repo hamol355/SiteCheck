@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "url": "http://TEST/",
+  "finalUrl": "http://TEST/",
+  "score": 64,
+  "grade": "Needs improvement",
+  "categories": {
+    "availability": {
+      "score": 14,
+      "max": 20
+    },
+    "security": {
+      "score": 10,
+      "max": 40
+    },
+    "seo": {
+      "score": 20,
+      "max": 20
+    },
+    "html": {
+      "score": 20,
+      "max": 20
+    }
+  },
+  "checks": [
+    {
+      "id": "http-status",
+      "category": "availability",
+      "status": "pass",
+      "message": "Responded with HTTP 200",
+      "points": 8,
+      "maxPoints": 8
+    },
+    {
+      "id": "response-time",
+      "category": "availability",
+      "status": "pass",
+      "message": "Response time N ms",
+      "points": 6,
+      "maxPoints": 6
+    },
+    {
+      "id": "https-redirect",
+      "category": "availability",
+      "status": "fail",
+      "message": "http://TEST/ is served over HTTP without redirecting to HTTPS",
+      "points": 0,
+      "maxPoints": 6,
+      "remediation": "Redirect all http:// requests to https:// with a 301 response (e.g. \"return 301 https://$host$request_uri;\" in nginx)."
+    },
+    {
+      "id": "https",
+      "category": "security",
+      "status": "fail",
+      "message": "Page is served over plain HTTP",
+      "points": 0,
+      "maxPoints": 10,
+      "remediation": "Install a TLS certificate and serve the site over HTTPS (e.g. a free certificate from Let's Encrypt)."
+    },
+    {
+      "id": "strict-transport-security",
+      "category": "security",
+      "status": "fail",
+      "message": "HSTS has no effect because the page was served over HTTP",
+      "points": 0,
+      "maxPoints": 8,
+      "remediation": "Serve the site over HTTPS, then add header: Strict-Transport-Security: max-age=15552000"
+    },
+    {
+      "id": "content-security-policy",
+      "category": "security",
+      "status": "fail",
+      "message": "Missing Content-Security-Policy header",
+      "points": 0,
+      "maxPoints": 8,
+      "remediation": "Add header: Content-Security-Policy: default-src 'self' (and avoid 'unsafe-inline' and 'unsafe-eval')"
+    },
+    {
+      "id": "x-content-type-options",
+      "category": "security",
+      "status": "pass",
+      "message": "X-Content-Type-Options is nosniff",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
+      "id": "referrer-policy",
+      "category": "security",
+      "status": "pass",
+      "message": "Referrer-Policy is no-referrer",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
+      "id": "permissions-policy",
+      "category": "security",
+      "status": "fail",
+      "message": "Missing Permissions-Policy header",
+      "points": 0,
+      "maxPoints": 4,
+      "remediation": "Add header: Permissions-Policy: camera=(), microphone=(), geolocation=()"
+    },
+    {
+      "id": "title",
+      "category": "seo",
+      "status": "pass",
+      "message": "Title is 28 characters",
+      "points": 4,
+      "maxPoints": 4
+    },
+    {
+      "id": "meta-description",
+      "category": "seo",
+      "status": "pass",
+      "message": "Meta description is 78 characters",
+      "points": 4,
+      "maxPoints": 4
+    },
+    {
+      "id": "h1",
+      "category": "seo",
+      "status": "pass",
+      "message": "Page has exactly one <h1>",
+      "points": 3,
+      "maxPoints": 3
+    },
+    {
+      "id": "canonical-url",
+      "category": "seo",
+      "status": "pass",
+      "message": "Canonical URL is https://example.com/",
+      "points": 3,
+      "maxPoints": 3
+    },
+    {
+      "id": "robots-txt",
+      "category": "seo",
+      "status": "pass",
+      "message": "robots.txt found",
+      "points": 3,
+      "maxPoints": 3
+    },
+    {
+      "id": "sitemap-xml",
+      "category": "seo",
+      "status": "pass",
+      "message": "Sitemap found at http://TEST/sitemap.xml",
+      "points": 3,
+      "maxPoints": 3
+    },
+    {
+      "id": "html-lang",
+      "category": "html",
+      "status": "pass",
+      "message": "Document language is \"en\"",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
+      "id": "viewport-meta",
+      "category": "html",
+      "status": "pass",
+      "message": "Viewport meta tag is set",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
+      "id": "image-alt",
+      "category": "html",
+      "status": "pass",
+      "message": "All 2 images have alt attributes",
+      "points": 6,
+      "maxPoints": 6
+    },
+    {
+      "id": "heading-structure",
+      "category": "html",
+      "status": "pass",
+      "message": "Heading levels are in order",
+      "points": 4,
+      "maxPoints": 4
+    }
+  ],
+  "meta": {
+    "sitecheckVersion": "0.1.0",
+    "analyzedAt": "2026-01-01T00:00:00.000Z",
+    "responseTimeMs": 0,
+    "truncated": false
+  }
+}

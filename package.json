@@ -1,0 +1,36 @@
+{
+  "name": "sitecheck-cli",
+  "version": "0.1.0",
+  "description": "CLI that checks a website for availability, security, SEO and HTML quality and reports a score 0-100.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "sitecheck": "dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+  "content-security-policy": "default-src 'self'; img-src 'self' data:",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=()"
+}
