@@ -5,6 +5,7 @@ import {
   decodeSitemapBytes,
   filterPageUrls,
   MAX_CHILD_SITEMAPS,
+  MAX_SITEMAP_URLS,
   parseSitemapXml,
   readSitemap,
   samplePages,
@@ -173,6 +174,43 @@ describe('readSitemap', () => {
     expect(res.urls).toHaveLength(MAX_CHILD_SITEMAPS);
     expect(res.notices.join()).toContain('more than 10');
   });
+
+  it('notices the child sitemap cap only once', async () => {
+    const routes: Parameters<typeof startTestServer>[0] = {
+      '/sitemap.xml': (req, res) => {
+        const base = `http://${req.headers.host}`;
+        res.writeHead(200, xml).end(index(`${base}/i1.xml`, `${base}/i2.xml`));
+      },
+    };
+    for (const name of ['i1', 'i2']) {
+      routes[`/${name}.xml`] = (req, res) => {
+        const base = `http://${req.headers.host}`;
+        const kids = Array.from({ length: 15 }, (_, i) => `${base}/${name}-c${i}.xml`);
+        res.writeHead(200, xml).end(index(...kids));
+      };
+    }
+    const s = await serve(routes);
+    const res = await readSitemap(`${s.url}/`, noRobots);
+    expect(res.notices.filter((n) => n.includes('more than 10'))).toHaveLength(1);
+  });
+
+  it('notices the URL cap', async () => {
+    const locs = Array.from({ length: MAX_SITEMAP_URLS + 1 }, (_, i) => `https://x.test/${i}`);
+    const s = await serve({ '/sitemap.xml': { headers: xml, body: urlset(...locs) } });
+    const res = await readSitemap(`${s.url}/`, noRobots);
+    expect(res.urls).toHaveLength(MAX_SITEMAP_URLS);
+    expect(res.notices).toEqual([
+      `Sitemap lists more than ${MAX_SITEMAP_URLS} URLs; reading the first ${MAX_SITEMAP_URLS}`,
+    ]);
+  });
+
+  it('does not notice a sitemap exactly at the URL cap', async () => {
+    const locs = Array.from({ length: MAX_SITEMAP_URLS }, (_, i) => `https://x.test/${i}`);
+    const s = await serve({ '/sitemap.xml': { headers: xml, body: urlset(...locs) } });
+    const res = await readSitemap(`${s.url}/`, noRobots);
+    expect(res.urls).toHaveLength(MAX_SITEMAP_URLS);
+    expect(res.notices).toEqual([]);
+  });
 });
 
 describe('filterPageUrls', () => {
@@ -263,5 +301,28 @@ describe('samplePages', () => {
     const out = samplePages(start, candidates, 3);
     expect(out).toEqual([start, 'https://x.test/a/2', 'https://x.test/a/7']);
     expect(samplePages(start, candidates, 3)).toEqual(out);
+  });
+
+  it('spreads a flat site evenly instead of taking the first pages alphabetically', () => {
+    const flat = Array.from(
+      { length: 100 },
+      (_, i) => `https://x.test/post-${String(i).padStart(3, '0')}/`,
+    );
+    expect(samplePages(start, flat, 5)).toEqual([
+      start,
+      'https://x.test/post-012/',
+      'https://x.test/post-037/',
+      'https://x.test/post-062/',
+      'https://x.test/post-087/',
+    ]);
+  });
+
+  it('keeps top-level pages in one group next to sections', () => {
+    const blog = Array.from({ length: 10 }, (_, i) => `https://x.test/blog/${i}`);
+    const top = ['https://x.test/about', 'https://x.test/contact', 'https://x.test/pricing'];
+    const out = samplePages(start, [...top, ...blog], 3);
+    expect(out).toHaveLength(3);
+    expect(out.filter((u) => top.includes(u))).toHaveLength(1);
+    expect(out.filter((u) => u.includes('/blog/'))).toHaveLength(1);
   });
 });

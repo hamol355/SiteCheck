@@ -83,6 +83,7 @@ export async function readSitemap(startUrl: string, robots: TextResponse): Promi
   const queue: { url: string; depth: number }[] = [{ url: root, depth: 0 }];
   const seen = new Set<string>([root]);
   let fetched = 0;
+  let childCapNoticed = false;
 
   while (queue.length > 0 && urls.length < MAX_SITEMAP_URLS) {
     const { url, depth } = queue.shift()!;
@@ -96,7 +97,13 @@ export async function readSitemap(startUrl: string, robots: TextResponse): Promi
       continue;
     }
     if (parsed.kind === 'urlset') {
-      urls.push(...parsed.locs.slice(0, MAX_SITEMAP_URLS - urls.length));
+      const room = MAX_SITEMAP_URLS - urls.length;
+      urls.push(...parsed.locs.slice(0, room));
+      if (parsed.locs.length > room || (urls.length === MAX_SITEMAP_URLS && queue.length > 0)) {
+        notices.push(
+          `Sitemap lists more than ${MAX_SITEMAP_URLS} URLs; reading the first ${MAX_SITEMAP_URLS}`,
+        );
+      }
       continue;
     }
     if (depth >= MAX_INDEX_DEPTH) {
@@ -107,9 +114,12 @@ export async function readSitemap(startUrl: string, robots: TextResponse): Promi
       const child = httpUrl(loc, res.url);
       if (!child || seen.has(child.href)) continue;
       if (fetched - 1 + queue.length >= MAX_CHILD_SITEMAPS) {
-        notices.push(
-          `Sitemap index lists more than ${MAX_CHILD_SITEMAPS} sitemaps; reading the first ${MAX_CHILD_SITEMAPS}`,
-        );
+        if (!childCapNoticed) {
+          notices.push(
+            `Sitemap index lists more than ${MAX_CHILD_SITEMAPS} sitemaps; reading the first ${MAX_CHILD_SITEMAPS}`,
+          );
+          childCapNoticed = true;
+        }
         break;
       }
       seen.add(child.href);
@@ -148,8 +158,18 @@ export function filterPageUrls(urls: string[], startUrl: string, robots: TextRes
 }
 
 /**
+ * Groups by first path segment, but only when there is a deeper segment: /blog/a and /blog/b
+ * share "blog", while top-level pages (/about, /my-post/) share one group so a flat site is
+ * sampled evenly instead of taking the first pages alphabetically.
+ */
+function groupKey(href: string): string {
+  const segments = new URL(href).pathname.split('/').filter(Boolean);
+  return segments.length > 1 ? segments[0]! : '';
+}
+
+/**
  * Picks up to `count` pages including the start page. The rest is spread deterministically:
- * candidates are grouped by first path segment (so templates like /blog and /products are all
+ * candidates are grouped by path section (so templates like /blog and /products are all
  * covered), groups share the quota round-robin, and each group contributes evenly spaced URLs.
  */
 export function samplePages(startUrl: string, candidates: string[], count: number): string[] {
@@ -158,7 +178,7 @@ export function samplePages(startUrl: string, candidates: string[], count: numbe
   const groups = new Map<string, string[]>();
   for (const href of candidates) {
     if (href === start) continue;
-    const key = new URL(href).pathname.split('/')[1] ?? '';
+    const key = groupKey(href);
     const group = groups.get(key);
     if (group) group.push(href);
     else groups.set(key, [href]);
