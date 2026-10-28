@@ -7,7 +7,7 @@ const CATEGORY_TITLES: Record<Category, string> = {
   availability: 'Availability',
   security: 'Security',
   seo: 'SEO',
-  html: 'HTML',
+  accessibility: 'Accessibility',
 };
 
 const SYMBOLS: Record<Status, string> = {
@@ -50,8 +50,9 @@ export function renderTerminal(report: Report, options: { color?: boolean } = {}
     lines.push('', `${CATEGORY_TITLES[category]} (${summary})`);
     for (const check of checks) {
       // Messages may quote site data; escaping again guards against a check that forgot to.
+      const wcag = check.wcag?.length ? ` (WCAG ${check.wcag.join(', ')})` : '';
       lines.push(
-        `  ${paint(check.status, SYMBOLS[check.status])} ${escapeControlChars(check.message)}`,
+        `  ${paint(check.status, SYMBOLS[check.status])} ${escapeControlChars(check.message)}${wcag}`,
       );
       if (check.remediation && check.status !== 'pass') {
         lines.push(`    → ${escapeControlChars(check.remediation)}`);

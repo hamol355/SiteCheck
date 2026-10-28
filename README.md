@@ -1,6 +1,6 @@
 # SiteCheck
 
-SiteCheck is a command-line tool that checks a website for availability, security, SEO and HTML quality and reports a score from 0 to 100, with advice on how to fix each problem.
+SiteCheck is a command-line tool that checks a website for availability, security, SEO and accessibility and reports a score from 0 to 100, with advice on how to fix each problem.
 
 ## Installation
 
@@ -43,16 +43,18 @@ The report goes to **stdout**; errors and diagnostics go to **stderr**, so `--fo
 | ------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Availability | `http-status`, `response-time`, `https-redirect`                                                                 |
 | Security     | `https`, `strict-transport-security`, `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy` |
-| SEO          | `title`, `meta-description`, `h1`, `canonical-url`, `robots-txt`, `sitemap-xml`                                  |
-| HTML         | `html-lang`, `viewport-meta`, `image-alt`, `heading-structure`                                                   |
+| SEO          | `title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`, `robots-txt`, `sitemap-xml`                |
+| Accessibility | `html-lang`, `image-alt`, `heading-structure`, `link-name`, `button-name`, `form-label`, `iframe-title`, `landmarks`, `aria-valid`, `zoom-allowed`, `tabindex`, `meta-refresh` |
 
-Each check ends as `pass`, `warn`, `fail`, `error` (the check itself crashed; other checks are unaffected) or `skip` (the check did not apply). If the page does not respond with 2xx, the checks that read the page content (`title`, `meta-description`, `h1`, `canonical-url` and all HTML checks) are skipped, since an error or block page says nothing about the real page. `warn` and `fail` come with a `remediation` hint.
+Each check ends as `pass`, `warn`, `fail`, `error` (the check itself crashed; other checks are unaffected) or `skip` (the check did not apply). If the page does not respond with 2xx, the checks that read the page content (`title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta` and all accessibility checks) are skipped, since an error or block page says nothing about the real page. `warn` and `fail` come with a `remediation` hint.
+
+The accessibility checks are static: they read the HTML as served and each lists the WCAG 2.2 success criteria it relates to (`wcag` in the JSON, `(WCAG 2.4.4, 4.1.2)` in the text output).
 
 ## Score model
 
 Each check has a maximum number of points. `pass` earns all of them, `warn` half (rounded down), and `fail` none. `error` and `skip` checks are left out of the score entirely; for `error` the CLI also prints a warning on stderr. A category where every check was skipped scores 0 (shown as "not checked"), and the other categories are not scaled up to compensate, so a site whose page could not be checked cannot get a high score.
 
-- **Category score** = earned points / possible points of the scored checks × category weight, rounded to an integer. Weights: Availability 20, Security 40, SEO 20, HTML 20 (preliminary).
+- **Category score** = earned points / possible points of the scored checks × category weight, rounded to an integer. Weights: Availability 15, Security 35, SEO 20, Accessibility 30 (preliminary).
 - **Total score** = the sum of the _unrounded_ category scores, rounded once. The rounded category scores therefore do not always add up to the total.
 - **Grade:** 90–100 Excellent, 75–89 Good, 50–74 Needs improvement, 0–49 Poor.
 
@@ -74,10 +76,10 @@ The JSON output is a public interface (`schemaVersion` is `1`):
   "score": 73,
   "grade": "Needs improvement",
   "categories": {
-    "availability": { "score": 20, "max": 20 },
-    "security": { "score": 20, "max": 40 },
+    "availability": { "score": 15, "max": 15 },
+    "security": { "score": 18, "max": 35 },
     "seo": { "score": 14, "max": 20 },
-    "html": { "score": 20, "max": 20 }
+    "accessibility": { "score": 26, "max": 30 }
   },
   "checks": [
     {
@@ -88,6 +90,16 @@ The JSON output is a public interface (`schemaVersion` is `1`):
       "remediation": "Add a robots.txt at the site root, ...",
       "points": 0,
       "maxPoints": 3
+    },
+    {
+      "id": "link-name",
+      "category": "accessibility",
+      "status": "warn",
+      "message": "1 of 10 links have no accessible name",
+      "remediation": "Give every link descriptive text, ...",
+      "points": 2,
+      "maxPoints": 4,
+      "wcag": ["2.4.4", "4.1.2"]
     }
   ],
   "meta": {
@@ -103,11 +115,12 @@ The JSON output is a public interface (`schemaVersion` is `1`):
 
 ## Limitations
 
-- The page is fetched once and analysed as served. JavaScript is not executed, so content rendered client-side (SPAs) is not seen by the HTML and SEO checks.
+- The page is fetched once and analysed as served. JavaScript is not executed, so content rendered client-side (SPAs) is not seen by the SEO and accessibility checks.
 - Sites that do not allow automated visitors are not scored. If the start page answers 401, 403 or 429, serves a bot-protection challenge (e.g. Cloudflare "Just a moment"), or `robots.txt` disallows the page for `SiteCheck` or `*`, SiteCheck prints `Access not allowed: <reason>` to stderr, writes nothing to stdout and exits with code 3. SiteCheck identifies itself as `SiteCheck/<version>` and never tries to bypass the protection. Note that many sites have `User-agent: *` / `Disallow: /` and only admit named search engines; ask the site owner to allow the `SiteCheck` user agent. A broken `robots.txt` (4xx, 5xx, unreachable) is treated as allowing everything; on 5xx SiteCheck prints a `Notice:` line to stderr. A site that answers 200 with a reduced page for bots cannot be detected reliably and is analysed as served, so the score reflects what SiteCheck received rather than what a browser would see. 404 and 5xx responses are not blocks and get a normal report with a failed `http-status`.
 - Requests time out after 10 s (5 s for `robots.txt`, `sitemap.xml` and the HTTP→HTTPS probe), follow at most 5 redirects, and read at most 2 MB of the page (1 MB for `robots.txt` and the sitemap). Larger pages are analysed truncated; the report then has `meta.truncated: true` and the text output says so.
 - The sitemap check verifies that a sitemap exists and looks like XML; it does not validate its contents.
-- Performance, Core Web Vitals and in-depth accessibility checks are out of scope for v1.
+- Accessibility checks cover only what static HTML shows. Colour contrast, focus indicators and keyboard traps need a real browser and are not checked, so a good accessibility score does not mean the site is WCAG compliant.
+- Performance and Core Web Vitals are out of scope for v1.
 
 ## Development
 

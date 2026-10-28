@@ -8,6 +8,7 @@ import {
   checkRobotsTxt,
   checkSitemap,
   checkTitle,
+  checkViewport,
   extractSitemapUrls,
   resolveSitemapUrl,
   runSeoChecks,
@@ -179,6 +180,20 @@ describe('sitemap', () => {
   });
 });
 
+describe('viewport-meta', () => {
+  const vp = (content: string) => load(`<meta name="viewport" content="${content}">`);
+
+  it('passes with width=device-width', () => {
+    expect(checkViewport(vp('width=device-width, initial-scale=1')).status).toBe('pass');
+    expect(checkViewport(vp('width = device-width')).status).toBe('pass');
+  });
+
+  it('warns without it and fails when missing', () => {
+    expect(checkViewport(vp('initial-scale=1')).status).toBe('warn');
+    expect(checkViewport(load('<html></html>')).status).toBe('fail');
+  });
+});
+
 describe('runSeoChecks', () => {
   const ok = text({ body: '<urlset></urlset>' });
 
@@ -194,11 +209,12 @@ describe('runSeoChecks', () => {
       'meta-description',
       'h1',
       'canonical-url',
+      'viewport-meta',
       'robots-txt',
       'sitemap-xml',
     ]);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(20);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(25);
   });
 
   it('reports a bad page', () => {
@@ -214,6 +230,7 @@ describe('runSeoChecks', () => {
       'meta-description': 'fail',
       h1: 'warn',
       'canonical-url': 'fail',
+      'viewport-meta': 'warn',
     });
   });
 
@@ -239,6 +256,7 @@ describe('runSeoChecks', () => {
       'meta-description': 'skip',
       h1: 'skip',
       'canonical-url': 'skip',
+      'viewport-meta': 'skip',
       'robots-txt': 'pass',
       'sitemap-xml': 'pass',
     });

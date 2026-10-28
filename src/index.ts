@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
+import { runAccessibilityChecks } from './checks/accessibility.js';
 import { runAvailabilityChecks } from './checks/availability.js';
 import { BlockedError, detectBlock, robotsNotice } from './checks/blocked.js';
-import { runHtmlChecks } from './checks/html.js';
 import { resolveSitemapUrl, runSeoChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
 import { fetchPage, fetchText, probeHttpRedirect } from './net/http.js';
@@ -67,7 +67,7 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
     ...runAvailabilityChecks(page, probe),
     ...runSecurityChecks(page),
     ...runSeoChecks({ $, status: page.status, robots, sitemap }),
-    ...runHtmlChecks({ $, status: page.status }),
+    ...runAccessibilityChecks({ $, status: page.status }),
   ];
   return {
     schemaVersion: 1,

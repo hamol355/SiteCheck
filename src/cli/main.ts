@@ -96,7 +96,7 @@ export async function main(
   let exitCode = EXIT_OK;
   const program = new Command()
     .name('sitecheck')
-    .description('Check a website for availability, security, SEO and HTML quality.')
+    .description('Check a website for availability, security, SEO and accessibility.')
     .version(VERSION)
     .argument('<url>', 'URL to check (https:// is assumed if no scheme is given)')
     .addOption(

@@ -204,6 +204,7 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 | `tabindex`       | 2.4.3      | 1   | inget `tabindex` > 0                                                                        | –                                       | finns                      |
 | `meta-refresh`   | 2.2.1      | 1   | ingen `<meta http-equiv=refresh>` med fördröjning > 0                                       | –                                       | finns                      |
 
+- Innehåll under `aria-hidden="true"` (skiftlägesokänsligt) ger inget namn, och länkar, knappar och iframes där kontrolleras inte. `<a href role=button>` räknas bara som knapp. `main` med `hidden` på sig själv eller en förälder räknas inte. `meta-refresh` med fördröjning över 20 h är undantagen (WCAG 2.2.1). Roller från DPUB-ARIA och Graphics-ARIA är giltiga.
 - Max-poäng är preliminära och justeras efter manuell testrunda. Fas B (om tid finns): tabellrubriker (1.3.1), `autocomplete` på personuppgiftsfält (1.3.5), `<video autoplay>` utan `muted` (1.4.2).
 - Går inte att göra statiskt och lovas inte: kontrast (1.4.3), fokusindikator, tangentbordsfällor. Kräver headless browser (Playwright + axe-core) och är ett separat beslut; listas som begränsning i README.
 
@@ -225,9 +226,8 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 ## 6. Scoring
 
 ```ts
-export const WEIGHTS = { availability: 20, security: 40, seo: 20, html: 20 } as const;
-// M7: html ersätts av accessibility och vikterna räknas om, förslag
-// { availability: 15, security: 35, seo: 20, accessibility: 30 } (summa 100).
+export const WEIGHTS = { availability: 15, security: 35, seo: 20, accessibility: 30 } as const;
+// M7: accessibility ersatte html (tidigare 20/40/20/20).
 // Vikterna är fortfarande preliminära; golden-testet och README uppdateras i samma commit.
 export const GRADES = [
   { min: 90, label: 'Excellent' },
@@ -363,12 +363,12 @@ Klart när: en blockerad sajt ger ett tydligt "access not allowed" med orsak i s
 
 Branch: `feature/a11y-checks`, därefter `feature/a11y-category`.
 
-- [ ] `checks/accessibility.ts`: checkarna i 5c som rena funktioner + `runAccessibilityChecks`
-- [ ] `wcag?: string[]` på `CheckDefinition`/`CheckResult`; visas i terminal och JSON
-- [ ] Ny kategori `accessibility` som ersätter `html`: flytta `html-lang`, `image-alt`, `heading-structure` hit och `viewport-meta` till `seo`; ta bort `html` ur `Category`; nya `WEIGHTS` (se avsnitt 6)
-- [ ] `checks/html.ts` upphör; kontrollerna flyttas till `accessibility.ts` resp. `seo.ts`, testerna likaså
-- [ ] Tester med bra/dåliga fixtures per check, inkl. kantfall (`alt` i länk, omslutande label, dolda fält); uppdatera `good.html`, `bad.html` och golden-JSON
-- [ ] Scoring-tester för den nya kategorin; README (checks, score-modell, begränsningar: ingen kontrast/fokus)
+- [x] `checks/accessibility.ts`: checkarna i 5c som rena funktioner + `runAccessibilityChecks`
+- [x] `wcag?: string[]` på `CheckDefinition`/`CheckResult`; visas i terminal och JSON
+- [x] Ny kategori `accessibility` som ersätter `html`: flytta `html-lang`, `image-alt`, `heading-structure` hit och `viewport-meta` till `seo`; ta bort `html` ur `Category`; nya `WEIGHTS` (se avsnitt 6)
+- [x] `checks/html.ts` upphör; kontrollerna flyttas till `accessibility.ts` resp. `seo.ts`, testerna likaså
+- [x] Tester med bra/dåliga fixtures per check, inkl. kantfall (`alt` i länk, omslutande label, dolda fält); uppdatera `good.html`, `bad.html` och golden-JSON
+- [x] Scoring-tester för den nya kategorin; README (checks, score-modell, begränsningar: ingen kontrast/fokus)
 - [ ] Fas B om tid finns: tabellrubriker, `autocomplete`, autoplay
 
 Klart när: rapporten har en accessibility-sektion med WCAG-referenser, och `npm test` är grönt.

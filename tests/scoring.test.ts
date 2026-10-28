@@ -55,10 +55,10 @@ describe('calculateScore', () => {
     expect(result.score).toBe(100);
     expect(result.grade).toBe('Excellent');
     expect(result.categories).toEqual({
-      availability: { score: 20, max: 20 },
-      security: { score: 40, max: 40 },
+      availability: { score: 15, max: 15 },
+      security: { score: 35, max: 35 },
       seo: { score: 20, max: 20 },
-      html: { score: 20, max: 20 },
+      accessibility: { score: 30, max: 30 },
     });
   });
 
@@ -66,7 +66,7 @@ describe('calculateScore', () => {
     const result = calculateScore([]);
     expect(result.score).toBe(0);
     expect(result.grade).toBe('Poor');
-    expect(result.categories.security).toEqual({ score: 0, max: 40 });
+    expect(result.categories.security).toEqual({ score: 0, max: 35 });
   });
 
   it('scores 0 when every check errored', () => {
@@ -80,23 +80,23 @@ describe('calculateScore', () => {
       check('availability', 10, 10),
       check('availability', 0, 10, 'error'),
     ]);
-    expect(result.categories.availability.score).toBe(20);
+    expect(result.categories.availability.score).toBe(15);
   });
 
   it('leaves skipped checks out, scoring a fully skipped category 0', () => {
     const result = calculateScore([
       check('seo', 3, 3),
       check('seo', 0, 4, 'skip'),
-      check('html', 0, 5, 'skip'),
+      check('accessibility', 0, 5, 'skip'),
     ]);
     expect(result.categories.seo.score).toBe(20);
-    expect(result.categories.html).toEqual({ score: 0, max: 20 });
+    expect(result.categories.accessibility).toEqual({ score: 0, max: 30 });
   });
 
   it('gives a category without checks 0 while the others count normally', () => {
     const result = calculateScore((['availability', 'security', 'seo'] as const).map(full));
-    expect(result.categories.html.score).toBe(0);
-    expect(result.score).toBe(80);
+    expect(result.categories.accessibility.score).toBe(0);
+    expect(result.score).toBe(70);
   });
 
   it('scores a category without possible points as 0, not NaN', () => {
@@ -107,12 +107,13 @@ describe('calculateScore', () => {
 
   it('scales each category by its weight', () => {
     const result = calculateScore([
-      check('availability', 5, 10), // half of 20
-      check('security', 10, 10), // all of 40
+      check('availability', 5, 10), // half of 15
+      check('security', 10, 10), // all of 35
+      check('seo', 10, 10), // all of 20
     ]);
-    expect(result.categories.availability.score).toBe(10);
-    expect(result.categories.security.score).toBe(40);
-    expect(result.score).toBe(50);
+    expect(result.categories.availability.score).toBe(8); // 7.5 rounded
+    expect(result.categories.security.score).toBe(35);
+    expect(result.score).toBe(63); // 62.5 rounded once
     expect(result.grade).toBe('Needs improvement');
   });
 
@@ -122,16 +123,16 @@ describe('calculateScore', () => {
   });
 
   it('rounds the total once, so rounded categories need not add up to it', () => {
-    // availability, seo and html each score exactly 2.5 (rounded to 3); security scores 40.
+    // availability, seo and accessibility score 1.875, 2.5 and 3.75; security scores 35.
     const result = calculateScore([
       check('availability', 1, 8),
       check('seo', 1, 8),
-      check('html', 1, 8),
+      check('accessibility', 1, 8),
       check('security', 10, 10),
     ]);
     const categorySum = Object.values(result.categories).reduce((s, c) => s + c.score, 0);
-    expect(categorySum).toBe(49);
-    expect(result.score).toBe(48); // 47.5 rounded once
+    expect(categorySum).toBe(44); // 2 + 35 + 3 + 4
+    expect(result.score).toBe(43); // 43.125 rounded once
   });
 
   it.each([
@@ -142,12 +143,12 @@ describe('calculateScore', () => {
     [89, 'Good'],
     [90, 'Excellent'],
   ])('a total of %i is graded %s', (target, grade) => {
-    // Fill the categories in order (20, 40, 20, 20) until `target` points are placed.
+    // Fill the categories in order (15, 35, 20, 30) until `target` points are placed.
     const result = calculateScore([
-      check('availability', Math.min(target, 20), 20),
-      check('security', Math.min(Math.max(target - 20, 0), 40), 40),
-      check('seo', Math.min(Math.max(target - 60, 0), 20), 20),
-      check('html', Math.min(Math.max(target - 80, 0), 20), 20),
+      check('availability', Math.min(target, 15), 15),
+      check('security', Math.min(Math.max(target - 15, 0), 35), 35),
+      check('seo', Math.min(Math.max(target - 50, 0), 20), 20),
+      check('accessibility', Math.min(Math.max(target - 70, 0), 30), 30),
     ]);
     expect(result.score).toBe(target);
     expect(result.grade).toBe(grade);
