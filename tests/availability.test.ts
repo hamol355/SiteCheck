@@ -44,10 +44,6 @@ describe('http-status', () => {
     expect(r.points).toBe(0);
     expect(r.remediation).toBeDefined();
   });
-
-  it('hints at bot blocking for 403', () => {
-    expect(checkHttpStatus({ status: 403 }).remediation).toMatch(/block/i);
-  });
 });
 
 describe('response-time', () => {

@@ -53,6 +53,12 @@ beforeAll(async () => {
     '/bad': { body: fixture('bad.html') },
     '/slow': { body: fixture('good.html'), headers: goodHeaders, delayMs: 1600 },
     '/loop': { status: 302, headers: { location: '/loop' } },
+    '/forbidden': { status: 403, body: '<p>Forbidden</p>' },
+    '/challenge': {
+      status: 403,
+      body: '<html><head><title>Just a moment...</title></head></html>',
+    },
+    '/server-error': { status: 500, body: '<p>Oops</p>' },
   });
 }, 60_000);
 
@@ -159,6 +165,24 @@ describe('built CLI', () => {
     expect(r.code).toBe(EXIT_UNREACHABLE);
     expect(r.stdout).toBe('');
     expect(r.stderr).toMatch(/Too many redirects/);
+  });
+
+  it.each([
+    ['/forbidden', /^Access not allowed: The site refused the request \(HTTP 403\)/],
+    ['/challenge', /^Access not allowed: The site served a bot-protection challenge/],
+  ])('exits 3 with "Access not allowed" and no stdout for %s', async (path, message) => {
+    const r = await sitecheck([`${server.url}${path}`, '--format', 'json']);
+    expect(r.code).toBe(EXIT_UNREACHABLE);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toMatch(message);
+    expect(r.stderr).toContain('does not try to bypass');
+  });
+
+  it('still reports a normal page for a 500 response', async () => {
+    const r = await sitecheck([`${server.url}/server-error`, '--format', 'json']);
+    expect(r.code).toBe(EXIT_OK);
+    const report = JSON.parse(r.stdout) as Report;
+    expect(report.checks.find((c) => c.id === 'http-status')).toMatchObject({ status: 'fail' });
   });
 
   it('exits 3 when nothing is listening', async () => {

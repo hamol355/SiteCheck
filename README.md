@@ -35,7 +35,7 @@ The report goes to **stdout**; errors and diagnostics go to **stderr**, so `--fo
 | 0    | OK                                                          |
 | 1    | Score is below `--min-score`                                |
 | 2    | Invalid input (bad URL, unknown option, bad option value)   |
-| 3    | The site could not be reached (including timeouts and redirect loops) or an internal error occurred |
+| 3    | The site could not be reached (including timeouts and redirect loops), **blocks automated visitors** (`Access not allowed: <reason>` on stderr, no report), or an internal error occurred |
 
 ## Checks
 
@@ -104,7 +104,7 @@ The JSON output is a public interface (`schemaVersion` is `1`):
 ## Limitations
 
 - The page is fetched once and analysed as served. JavaScript is not executed, so content rendered client-side (SPAs) is not seen by the HTML and SEO checks.
-- Some sites block unknown clients. SiteCheck sends `User-Agent: SiteCheck/<version>`; a 403 is reported as a failed `http-status`, and the page content checks are skipped. A site that answers 200 with a reduced page for bots is analysed as served, so the score reflects what SiteCheck received rather than what a browser would see.
+- Sites that do not allow automated visitors are not scored. If the start page answers 401, 403 or 429, serves a bot-protection challenge (e.g. Cloudflare "Just a moment"), or `robots.txt` disallows the page for `SiteCheck` or `*`, SiteCheck prints `Access not allowed: <reason>` to stderr, writes nothing to stdout and exits with code 3. SiteCheck identifies itself as `SiteCheck/<version>` and never tries to bypass the protection. Note that many sites have `User-agent: *` / `Disallow: /` and only admit named search engines; ask the site owner to allow the `SiteCheck` user agent. A broken `robots.txt` (4xx, 5xx, unreachable) is treated as allowing everything. A site that answers 200 with a reduced page for bots cannot be detected reliably and is analysed as served, so the score reflects what SiteCheck received rather than what a browser would see. 404 and 5xx responses are not blocks and get a normal report with a failed `http-status`.
 - Requests time out after 10 s (5 s for `robots.txt`, `sitemap.xml` and the HTTP→HTTPS probe), follow at most 5 redirects, and read at most 2 MB of the page (1 MB for `robots.txt` and the sitemap). Larger pages are analysed truncated; the report then has `meta.truncated: true` and the text output says so.
 - The sitemap check verifies that a sitemap exists and looks like XML; it does not validate its contents.
 - Performance, Core Web Vitals and in-depth accessibility checks are out of scope for v1.

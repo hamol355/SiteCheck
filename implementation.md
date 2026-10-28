@@ -349,13 +349,13 @@ Avvikelser (status efter M5): sidkontrollerna hoppas över (`skip`) när sidan i
 
 Branch: `feature/blocked-sites`. Beslut 2026-10-28: ska med före release.
 
-- [ ] `checks/blocked.ts`: `detectBlock(page, robots)` + konstanter för challenge-mönster (se 5b)
-- [ ] `BlockedError` i `checks/blocked.ts`, re-export från `index.ts`; `analyze()` kastar den för blockerad startsida (robots.txt hämtas före kontrollerna)
-- [ ] `cli/exit-codes.ts`: kommentar på `EXIT_UNREACHABLE` att 3 även betyder blockerad (namnet behålls)
-- [ ] `availability.ts`: ta bort 401/403/429-hinten ur `http-status` (fallet når inte längre kontrollen)
-- [ ] CLI: `Access not allowed: <orsak>` på stderr, inget på stdout, exit 3
-- [ ] Tester: `detectBlock` per reason med header/body-fixtures, 401/403/429/challenge/robots-disallow mot testservern, att 404/5xx fortfarande ger vanlig rapport, CLI-integrationstest (stdout tomt, stderr innehåller orsak, exit 3)
-- [ ] README (Limitations, exit codes) och manuell test mot en sajt som blockerar (t.ex. stackoverflow.com, som tidigare gav 403)
+- [x] `checks/blocked.ts`: `detectBlock(page, robots)` + konstanter för challenge-mönster (se 5b)
+- [x] `BlockedError` i `checks/blocked.ts`, re-export från `index.ts`; `analyze()` kastar den för blockerad startsida (robots.txt hämtas före kontrollerna)
+- [x] `cli/exit-codes.ts`: kommentar på `EXIT_UNREACHABLE` att 3 även betyder blockerad (namnet behålls)
+- [x] `availability.ts`: ta bort 401/403/429-hinten ur `http-status` (fallet når inte längre kontrollen)
+- [x] CLI: `Access not allowed: <orsak>` på stderr, inget på stdout, exit 3
+- [x] Tester: `detectBlock` per reason med header/body-fixtures, 401/403/429/challenge/robots-disallow mot testservern, att 404/5xx fortfarande ger vanlig rapport, CLI-integrationstest (stdout tomt, stderr innehåller orsak, exit 3)
+- [x] README (Limitations, exit codes) och manuell test mot en sajt som blockerar (t.ex. stackoverflow.com, som tidigare gav 403)
 
 Klart när: en blockerad sajt ger ett tydligt "access not allowed" med orsak i stället för en score.
 

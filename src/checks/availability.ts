@@ -31,13 +31,11 @@ export function checkHttpStatus(page: Pick<FetchedPage, 'status'>): CheckResult 
       'Serve the page directly, or redirect with 301/308 and a Location header.',
     );
   }
-  let remediation = 'Make sure the URL is correct and the page exists.';
-  if (status === 401 || status === 403 || status === 429) {
-    remediation =
-      'The site may block automated requests. Check bot protection or firewall rules for the SiteCheck User-Agent.';
-  } else if (status >= 500) {
-    remediation = 'Check the server logs for the cause of the error.';
-  }
+  // 401/403/429 on the start page never get here: analyze() reports them as blocked.
+  const remediation =
+    status >= 500
+      ? 'Check the server logs for the cause of the error.'
+      : 'Make sure the URL is correct and the page exists.';
   return makeResult(HTTP_STATUS, 'fail', `Responded with HTTP ${status}`, remediation);
 }
 

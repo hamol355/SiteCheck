@@ -6,7 +6,7 @@ import {
   EXIT_UNREACHABLE,
   EXIT_USAGE,
 } from '../src/cli/exit-codes.js';
-import { analyze as defaultAnalyze } from '../src/index.js';
+import { analyze as defaultAnalyze, BlockedError } from '../src/index.js';
 import type { Report } from '../src/report.js';
 import { VERSION } from '../src/version.js';
 import { startTestServer, type TestServer } from './helpers/test-server.js';
@@ -137,6 +137,57 @@ describe('usage errors (exit 2)', () => {
     expect(r.code).toBe(EXIT_USAGE);
     expect(r.stdout).toBe('');
     expect(r.stderr).not.toBe('');
+  });
+});
+
+describe('blocked sites (exit 3)', () => {
+  const PAGE = '<html><head><title>A fine test page</title></head><body></body></html>';
+  let blocking: TestServer;
+
+  beforeEach(async () => {
+    blocking = await startTestServer({
+      '/': { body: PAGE },
+      '/private': { body: PAGE },
+      '/robots.txt': {
+        headers: { 'content-type': 'text/plain' },
+        body: 'User-agent: *\nDisallow: /private\n',
+      },
+      '/unauthorized': { status: 401 },
+      '/rate-limited': { status: 429 },
+      '/cloudflare': { status: 200, headers: { 'cf-mitigated': 'challenge' } },
+    });
+  });
+
+  afterEach(async () => {
+    await blocking.close();
+  });
+
+  it.each([
+    ['/unauthorized', 'The site requires authentication (HTTP 401)'],
+    ['/rate-limited', 'The site is rate limiting requests (HTTP 429)'],
+    ['/cloudflare', 'The site served a bot-protection challenge'],
+    ['/private', 'robots.txt does not allow automated access to this page'],
+  ])('refuses %s with a reason, no stdout and no score', async (path, reason) => {
+    const r = await run([`${blocking.url}${path}`, '--format', 'json']);
+    expect(r.code).toBe(EXIT_UNREACHABLE);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain(`Access not allowed: ${reason}`);
+  });
+
+  it('analyses an allowed path on the same site', async () => {
+    const r = await run([blocking.url]);
+    expect(r.code).toBe(EXIT_OK);
+    expect(r.stdout).toMatch(/Score: \d+\/100/);
+  });
+
+  it('throws BlockedError with reason, status and url from analyze()', async () => {
+    const err = await defaultAnalyze(`${blocking.url}/unauthorized`).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BlockedError);
+    expect(err).toMatchObject({
+      reason: 'unauthorized',
+      status: 401,
+      url: `${blocking.url}/unauthorized`,
+    });
   });
 });
 
