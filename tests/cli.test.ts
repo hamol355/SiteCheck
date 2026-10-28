@@ -180,6 +180,23 @@ describe('blocked sites (exit 3)', () => {
     expect(r.stdout).toMatch(/Score: \d+\/100/);
   });
 
+  it('prints a notice and still reports when robots.txt has a server error', async () => {
+    const broken = await startTestServer({
+      '/': { body: PAGE },
+      '/robots.txt': { status: 503, body: 'User-agent: *\nDisallow: /' },
+    });
+    try {
+      const r = await run([broken.url, '--format', 'json']);
+      expect(r.code).toBe(EXIT_OK);
+      expect(r.stderr).toContain(
+        'Notice: robots.txt responded with HTTP 503; treating it as allowing everything.',
+      );
+      expect(JSON.parse(r.stdout)).toHaveProperty('score');
+    } finally {
+      await broken.close();
+    }
+  });
+
   it('throws BlockedError with reason, status and url from analyze()', async () => {
     const err = await defaultAnalyze(`${blocking.url}/unauthorized`).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BlockedError);

@@ -60,6 +60,13 @@ interface RobotsRule {
   length: number;
 }
 
+/** Percent-encodes non-ASCII characters and uppercases escapes so paths compare as RFC 9309 says. */
+function normalizeEncoding(path: string): string {
+  return path
+    .replace(/[^\x00-\x7f]+/gu, (chars) => encodeURIComponent(chars))
+    .replace(/%[0-9a-f]{2}/gi, (escape) => escape.toUpperCase());
+}
+
 function compilePattern(path: string): RegExp {
   const anchored = path.endsWith('$');
   const body = (anchored ? path.slice(0, -1) : path)
@@ -81,7 +88,8 @@ function rulesFor(robotsTxt: string): RobotsRule[] {
   let agents: string[] = [];
   let inRules = false;
 
-  for (const raw of robotsTxt.split(/\r?\n/)) {
+  // RFC 9309 allows CR, LF or CRLF line endings; a leading BOM would hide the first field.
+  for (const raw of robotsTxt.replace(/^﻿/, '').split(/\r\n|\r|\n/)) {
     const match = /^([a-z-]+)\s*:\s*(.*)$/i.exec(raw.replace(/#.*/, '').trim());
     if (!match) continue;
     const field = match[1]?.toLowerCase();
@@ -95,10 +103,11 @@ function rulesFor(robotsTxt: string): RobotsRule[] {
       inRules = true;
       // An empty Disallow allows everything and has no effect.
       if (value === '') continue;
+      const path = normalizeEncoding(value);
       const rule = {
         allow: field === 'allow',
-        pattern: compilePattern(value),
-        length: value.length,
+        pattern: compilePattern(path),
+        length: path.length,
       };
       if (agents.includes(own)) named.push(rule);
       else if (agents.includes('*')) wildcard.push(rule);
@@ -113,7 +122,7 @@ export function isDisallowedByRobots(robots: TextResponse, url: string): boolean
   if (robots.status !== 200) return false;
   if (robots.contentType?.toLowerCase().includes('text/html')) return false;
   const target = new URL(url);
-  const path = target.pathname + target.search;
+  const path = normalizeEncoding(target.pathname + target.search);
   let best: RobotsRule | null = null;
   for (const rule of rulesFor(robots.body)) {
     if (!rule.pattern.test(path)) continue;
@@ -122,6 +131,12 @@ export function isDisallowedByRobots(robots: TextResponse, url: string): boolean
     }
   }
   return best !== null && !best.allow;
+}
+
+/** Notice for a robots.txt that could not be read because of a server error, or null. */
+export function robotsNotice(robots: TextResponse): string | null {
+  if (robots.status === null || robots.status < 500) return null;
+  return `robots.txt responded with HTTP ${robots.status}; treating it as allowing everything.`;
 }
 
 /**

@@ -57,7 +57,7 @@ async function execute(
 
   let report;
   try {
-    report = await analyze(url);
+    report = await analyze(url, { onNotice: (message) => io.stderr(`Notice: ${message}\n`) });
   } catch (err) {
     if (err instanceof BlockedError) {
       io.stderr(`Access not allowed: ${err.message}\n${BLOCK_HINT}\n`);

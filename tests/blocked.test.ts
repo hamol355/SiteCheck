@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectBlock, isDisallowedByRobots } from '../src/checks/blocked.js';
+import { detectBlock, isDisallowedByRobots, robotsNotice } from '../src/checks/blocked.js';
 import type { FetchedPage, TextResponse } from '../src/checks/types.js';
 
 const page = (overrides: Partial<FetchedPage> = {}): FetchedPage => ({
@@ -134,6 +134,19 @@ describe('robots.txt', () => {
     expect(isDisallowedByRobots(r, url)).toBe(false);
   });
 
+  it('parses a robots.txt with a BOM and CR line endings', () => {
+    expect(isDisallowedByRobots(robots('\uFEFFUser-agent: *\nDisallow: /'), url)).toBe(true);
+    expect(isDisallowedByRobots(robots('User-agent: *\rDisallow: /'), url)).toBe(true);
+  });
+
+  it('compares paths percent-encoded', () => {
+    const encoded = 'https://example.com/%C3%A5k?q=%C3%A5';
+    expect(isDisallowedByRobots(robots('User-agent: *\nDisallow: /åk'), encoded)).toBe(true);
+    expect(isDisallowedByRobots(robots('User-agent: *\nDisallow: /%c3%a5k'), encoded)).toBe(true);
+    const unencoded = 'https://example.com/åk';
+    expect(isDisallowedByRobots(robots('User-agent: *\nDisallow: /åk'), unencoded)).toBe(true);
+  });
+
   it('ignores an HTML response served as robots.txt', () => {
     const r = { ...robots('User-agent: *\nDisallow: /'), contentType: 'text/html' };
     expect(isDisallowedByRobots(r, url)).toBe(false);
@@ -147,5 +160,17 @@ describe('robots.txt', () => {
   it('reports a status block before robots-disallow', () => {
     const p = page({ status: 403, html: '' });
     expect(detectBlock(p, robots('User-agent: *\nDisallow: /'))).toBe('forbidden');
+  });
+});
+
+describe('robotsNotice', () => {
+  it.each([500, 503])('returns a notice for HTTP %i', (status) => {
+    expect(robotsNotice(robots('', status))).toBe(
+      `robots.txt responded with HTTP ${status}; treating it as allowing everything.`,
+    );
+  });
+
+  it.each([200, 404, 418, null])('returns null for %s', (status) => {
+    expect(robotsNotice(robots('', status))).toBeNull();
   });
 });
