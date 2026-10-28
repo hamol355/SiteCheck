@@ -37,6 +37,23 @@ export function analyzePage(page: Pick<FetchedPage, 'html' | 'status'>): CheckRe
   return [...runSeoPageChecks(input), ...runAccessibilityChecks(input)];
 }
 
+export const DEAD_PAGE_REMEDIATION =
+  'Fix the page or remove its URL from the sitemap; a sitemap should only list working pages.';
+
+/**
+ * A sitemap URL that answers 4xx/5xx is a real problem with the site, so unlike the start page
+ * (where `http-status` covers it) every page check fails instead of being skipped.
+ */
+function deadPageChecks(status: number): CheckResult[] {
+  return analyzePage({ html: null, status }).map((check) => ({
+    ...check,
+    status: 'fail',
+    message: `Page responded with HTTP ${status}`,
+    remediation: DEAD_PAGE_REMEDIATION,
+    points: 0,
+  }));
+}
+
 /** Fetches one extra page and analyses it, or says why it was skipped. Never throws. */
 export async function fetchAndAnalyzePage(url: string, robots: TextResponse): Promise<PageResult> {
   let page: FetchedPage;
@@ -49,6 +66,7 @@ export async function fetchAndAnalyzePage(url: string, robots: TextResponse): Pr
   const skip = (skipped: string): PageResult => ({ url, status: page.status, skipped, checks: [] });
   const block = detectBlock(page, robots);
   if (block) return skip(`Access not allowed: ${BLOCK_MESSAGES[block]}`);
+  if (page.status >= 400) return { url, status: page.status, checks: deadPageChecks(page.status) };
   if (page.status < 200 || page.status >= 300) return skip(`Responded with HTTP ${page.status}`);
   if (page.html === null) return skip('Not an HTML page');
   return { url, status: page.status, checks: analyzePage(page) };

@@ -4,6 +4,7 @@ import type { TextResponse } from '../src/checks/types.js';
 import {
   analyzeExtraPages,
   analyzePage,
+  DEAD_PAGE_REMEDIATION,
   fetchAndAnalyzePage,
   mapLimit,
   PAGE_CONCURRENCY,
@@ -71,13 +72,31 @@ describe('fetchAndAnalyzePage', () => {
     expect(res.checks.map((c) => c.id)).toContain('image-alt');
   });
 
-  it('skips an error status', async () => {
-    const s = await serve({});
-    const res = await fetchAndAnalyzePage(`${s.url}/missing`, noRobots);
+  it.each([404, 410, 500])('fails every page check on a dead page (HTTP %i)', async (status) => {
+    const s = await serve({ '/dead': { status, body: good } });
+    const res = await fetchAndAnalyzePage(`${s.url}/dead`, noRobots);
+    expect(res.status).toBe(status);
+    expect(res.skipped).toBeUndefined();
+    expect(res.checks.map((c) => c.id)).toEqual(
+      analyzePage({ html: good, status: 200 }).map((c) => c.id),
+    );
+    for (const check of res.checks) {
+      expect(check).toMatchObject({
+        status: 'fail',
+        message: `Page responded with HTTP ${status}`,
+        remediation: DEAD_PAGE_REMEDIATION,
+        points: 0,
+      });
+    }
+  });
+
+  it('skips an unfollowed redirect status', async () => {
+    const s = await serve({ '/r': { status: 300 } });
+    const res = await fetchAndAnalyzePage(`${s.url}/r`, noRobots);
     expect(res).toEqual({
-      url: `${s.url}/missing`,
-      status: 404,
-      skipped: 'Responded with HTTP 404',
+      url: `${s.url}/r`,
+      status: 300,
+      skipped: 'Responded with HTTP 300',
       checks: [],
     });
   });
