@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { runAvailabilityChecks } from './checks/availability.js';
+import { BlockedError, detectBlock, robotsNotice } from './checks/blocked.js';
 import { runHtmlChecks } from './checks/html.js';
 import { resolveSitemapUrl, runSeoChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
@@ -16,6 +17,8 @@ export type {
   Category,
   Status,
 } from './checks/types.js';
+export { BlockedError } from './checks/blocked.js';
+export type { BlockReason } from './checks/blocked.js';
 export { NetworkError, TimeoutError, TooManyRedirectsError } from './net/http.js';
 export type { Report } from './report.js';
 export type { Grade } from './scoring/score.js';
@@ -23,6 +26,8 @@ export type { Grade } from './scoring/score.js';
 export interface AnalyzeOptions {
   /** Clock used for `meta.analyzedAt`; injectable for deterministic tests. */
   now?: () => Date;
+  /** Receives diagnostics that do not change the report (e.g. a robots.txt server error). */
+  onNotice?: (message: string) => void;
 }
 
 /** Fetches the page once and runs all checks. Throws on network errors. */
@@ -44,6 +49,10 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
     probing,
     fetchText(new URL('/robots.txt', page.finalUrl).href),
   ]);
+  const notice = robotsNotice(robots);
+  if (notice) options.onNotice?.(notice);
+  const reason = detectBlock(page, robots);
+  if (reason) throw new BlockedError(reason, page.status, page.finalUrl);
   const sitemap = await fetchText(resolveSitemapUrl(page.finalUrl, robots));
   // Parse once. A parse failure must not abort the run; the page checks report it instead.
   let $: cheerio.CheerioAPI | null = null;

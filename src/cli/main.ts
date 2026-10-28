@@ -1,5 +1,6 @@
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
-import { analyze as defaultAnalyze } from '../index.js';
+import { BLOCK_HINT } from '../checks/blocked.js';
+import { analyze as defaultAnalyze, BlockedError } from '../index.js';
 import { renderJson } from '../output/json.js';
 import { renderTerminal, shouldUseColor } from '../output/terminal.js';
 import { escapeControlChars } from '../text.js';
@@ -56,9 +57,13 @@ async function execute(
 
   let report;
   try {
-    report = await analyze(url);
+    report = await analyze(url, { onNotice: (message) => io.stderr(`Notice: ${message}\n`) });
   } catch (err) {
-    reportError(io, 'Error', err);
+    if (err instanceof BlockedError) {
+      io.stderr(`Access not allowed: ${err.message}\n${BLOCK_HINT}\n`);
+    } else {
+      reportError(io, 'Error', err);
+    }
     return EXIT_UNREACHABLE;
   }
 

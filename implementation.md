@@ -180,7 +180,7 @@ Om sajten inte tillåter automatiska besökare ska SiteCheck säga det rakt ut, 
 | `robots-disallow` | `robots.txt` har Disallow som täcker startsidans path för `SiteCheck` eller `*`                                          | robots.txt does not allow automated access to this page                                   |
 
 - Mönstren för challenge-sidor ligger som konstanter på ett ställe (`checks/blocked.ts`).
-- **robots.txt-tolkning** (RFC 9309): gruppen för `SiteCheck` används om den finns, annars `*`; längsta matchande regel vinner, `Allow` vinner vid lika längd; `*` och `$` i mönster stöds. Matchas mot slutlig URL:s path + query (det är den sidan som analyseras). robots.txt som svarar 4xx (inkl. 401/403/418) eller inte går att hämta = allt tillåtet (Googles konvention); 5xx = allt tillåtet men notis på stderr (vi låter inte en trasig robots.txt blockera analysen). Startsidan hämtas parallellt med robots.txt; vid Disallow kastas svaret och ingen rapport skapas.
+- **robots.txt-tolkning** (RFC 9309): gruppen för `SiteCheck` används om den finns, annars `*`; längsta matchande regel vinner, `Allow` vinner vid lika längd; `*` och `$` i mönster stöds. Matchas mot slutlig URL:s path + query (det är den sidan som analyseras), båda sidor procentkodade (icke-ASCII kodas, hex i versaler); BOM och CR/LF/CRLF-radslut hanteras. robots.txt som svarar 4xx (inkl. 401/403/418) eller inte går att hämta = allt tillåtet (Googles konvention); 5xx = allt tillåtet men notis på stderr (vi låter inte en trasig robots.txt blockera analysen; motorn skriver inte själv utan anropar `AnalyzeOptions.onNotice`, som CLI:t skriver som `Notice: …`). robots.txt hämtas från startsidans slutliga origin, dvs. efter startsidan och parallellt med HTTP→HTTPS-proben; vid Disallow kastas svaret och ingen rapport skapas.
 - Konsekvens att dokumentera i README: många sajter har `User-agent: *` / `Disallow: /` och släpper bara in namngivna sökmotorer – de ger "access not allowed".
 - Alla meddelanden slutar med en hint: SiteCheck identifierar sig ärligt (`SiteCheck/<version>`) och försöker inte kringgå skyddet; be sajtägaren släppa igenom user-agenten, eller kör mot en miljö utan bot-skydd.
 - `analyze()` kastar `BlockedError` (reason, status, url), definierad i `checks/blocked.ts` bredvid `BlockReason` och re-exporterad från `index.ts` som övriga feltyper. CLI skriver `Access not allowed: <meddelande>` till stderr, inget på stdout, exit code 3 (samma som onåbar sida – inget nytt exit code i kontraktet; kan delas ut till eget senare om CI-användare behöver skilja dem).
@@ -349,13 +349,13 @@ Avvikelser (status efter M5): sidkontrollerna hoppas över (`skip`) när sidan i
 
 Branch: `feature/blocked-sites`. Beslut 2026-10-28: ska med före release.
 
-- [ ] `checks/blocked.ts`: `detectBlock(page, robots)` + konstanter för challenge-mönster (se 5b)
-- [ ] `BlockedError` i `checks/blocked.ts`, re-export från `index.ts`; `analyze()` kastar den för blockerad startsida (robots.txt hämtas före kontrollerna)
-- [ ] `cli/exit-codes.ts`: kommentar på `EXIT_UNREACHABLE` att 3 även betyder blockerad (namnet behålls)
-- [ ] `availability.ts`: ta bort 401/403/429-hinten ur `http-status` (fallet når inte längre kontrollen)
-- [ ] CLI: `Access not allowed: <orsak>` på stderr, inget på stdout, exit 3
-- [ ] Tester: `detectBlock` per reason med header/body-fixtures, 401/403/429/challenge/robots-disallow mot testservern, att 404/5xx fortfarande ger vanlig rapport, CLI-integrationstest (stdout tomt, stderr innehåller orsak, exit 3)
-- [ ] README (Limitations, exit codes) och manuell test mot en sajt som blockerar (t.ex. stackoverflow.com, som tidigare gav 403)
+- [x] `checks/blocked.ts`: `detectBlock(page, robots)` + konstanter för challenge-mönster (se 5b)
+- [x] `BlockedError` i `checks/blocked.ts`, re-export från `index.ts`; `analyze()` kastar den för blockerad startsida (robots.txt hämtas före kontrollerna)
+- [x] `cli/exit-codes.ts`: kommentar på `EXIT_UNREACHABLE` att 3 även betyder blockerad (namnet behålls)
+- [x] `availability.ts`: ta bort 401/403/429-hinten ur `http-status` (fallet når inte längre kontrollen)
+- [x] CLI: `Access not allowed: <orsak>` på stderr, inget på stdout, exit 3
+- [x] Tester: `detectBlock` per reason med header/body-fixtures, 401/403/429/challenge/robots-disallow mot testservern, att 404/5xx fortfarande ger vanlig rapport, CLI-integrationstest (stdout tomt, stderr innehåller orsak, exit 3)
+- [x] README (Limitations, exit codes) och manuell test mot en sajt som blockerar (t.ex. stackoverflow.com, som tidigare gav 403)
 
 Klart när: en blockerad sajt ger ett tydligt "access not allowed" med orsak i stället för en score.
 
