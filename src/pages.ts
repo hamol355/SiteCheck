@@ -3,10 +3,14 @@ import { runAccessibilityChecks } from './checks/accessibility.js';
 import { BLOCK_MESSAGES, detectBlock } from './checks/blocked.js';
 import { runSeoPageChecks } from './checks/seo.js';
 import type { CheckResult, FetchedPage, TextResponse } from './checks/types.js';
-import { fetchPage } from './net/http.js';
+import { fetchPage, type BytesResponse } from './net/http.js';
+import { filterPageUrls, readSitemap, samplePages } from './net/sitemap.js';
+import type { PageReport } from './report.js';
 
 /** Extra pages are fetched at most this many at a time. */
 export const PAGE_CONCURRENCY = 4;
+/** Hard cap on pages per run, including the start page. */
+export const MAX_PAGES = 50;
 
 export interface PageResult {
   /** The URL as requested (from the sitemap). */
@@ -88,6 +92,38 @@ export async function mapLimit<T, R>(
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
+}
+
+/**
+ * Picks up to `count - 1` extra pages from the sitemap: same origin as the start page, allowed by
+ * robots.txt, spread over the site's sections. Reasons for analysing fewer pages go to `notify`.
+ */
+export async function selectExtraPages(
+  startUrl: string,
+  robots: TextResponse,
+  rootSitemap: BytesResponse,
+  count: number,
+  notify: (message: string) => void,
+): Promise<string[]> {
+  const found = await readSitemap(startUrl, robots, rootSitemap);
+  found.notices.forEach(notify);
+  const candidates = filterPageUrls(found.urls, startUrl, robots);
+  // A missing or invalid sitemap already has a notice; this covers one with nothing usable.
+  if (candidates.length === 0 && (found.urls.length > 0 || found.notices.length === 0)) {
+    notify(`Sitemap has no URLs on ${new URL(startUrl).origin}; analysing the start page only`);
+  }
+  return samplePages(startUrl, candidates, count).slice(1);
+}
+
+/** The public per-page entry: only id, status and message per check; the rest is in `checks`. */
+export function toPageReport(page: PageResult): PageReport {
+  const entry: PageReport = {
+    url: page.url,
+    status: page.status,
+    checks: page.checks.map(({ id, status, message }) => ({ id, status, message })),
+  };
+  if (page.skipped !== undefined) entry.skipped = page.skipped;
+  return entry;
 }
 
 /**

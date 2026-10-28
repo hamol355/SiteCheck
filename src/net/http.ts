@@ -257,6 +257,16 @@ export interface BytesResponse {
   truncated: boolean;
 }
 
+/** Decodes a `fetchBytes` result like `fetchText` would, so one response can serve both uses. */
+export function bytesToText(res: BytesResponse): TextResponse {
+  return {
+    url: res.url,
+    status: res.status,
+    contentType: res.contentType,
+    body: decoderFor(res.contentType).decode(res.bytes),
+  };
+}
+
 /** Fetches a resource of any content-type as raw bytes (e.g. a gzipped sitemap). Never throws. */
 export async function fetchBytes(url: string, options: FetchOptions = {}): Promise<BytesResponse> {
   try {
