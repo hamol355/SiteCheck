@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { gzipSync } from 'node:zlib';
 import {
+  fetchBytes,
   fetchPage,
   fetchText,
   httpVariant,
@@ -287,5 +289,37 @@ describe('fetchText', () => {
     });
     expect((await fetchText(`${server.url}/slow`, { timeoutMs: 100 })).status).toBeNull();
     expect((await fetchText(`${server.url}/loop`)).status).toBeNull();
+  });
+});
+
+describe('fetchBytes', () => {
+  it('returns the raw bytes so gzip survives', async () => {
+    const gz = gzipSync('<urlset/>');
+    server = await startTestServer({
+      '/s.xml.gz': (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/gzip' }).end(gz);
+      },
+    });
+    const res = await fetchBytes(`${server.url}/s.xml.gz`);
+    expect(res.status).toBe(200);
+    expect(res.contentType).toBe('application/gzip');
+    expect(res.bytes.equals(gz)).toBe(true);
+    expect(res.truncated).toBe(false);
+  });
+
+  it('caps the body and reports truncated', async () => {
+    server = await startTestServer({ '/big': { body: 'x'.repeat(100) } });
+    const res = await fetchBytes(`${server.url}/big`, { maxBodyBytes: 10 });
+    expect(res.bytes.byteLength).toBe(10);
+    expect(res.truncated).toBe(true);
+  });
+
+  it('never throws: unreachable gives status null', async () => {
+    server = await startTestServer({});
+    const url = `${server.url}/`;
+    await server.close();
+    const res = await fetchBytes(url, { timeoutMs: 500 });
+    expect(res.status).toBeNull();
+    expect(res.bytes.byteLength).toBe(0);
   });
 });
