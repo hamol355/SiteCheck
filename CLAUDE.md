@@ -4,13 +4,13 @@ Vägledning för Claude Code i det här repot. Produktspecifikationen finns i [S
 
 ## Projekt
 
-SiteCheck är ett CLI-verktyg (TypeScript/Node.js) som tar en URL, kör automatiserade kontroller inom Availability, Security, SEO och HTML, och presenterar en rapport med en score 0–100.
+SiteCheck är ett CLI-verktyg (TypeScript/Node.js) som tar en URL, kör automatiserade kontroller inom Availability, Security, SEO och HTML (i M7 ersätts HTML av Accessibility), och presenterar en rapport med en score 0–100.
 
-**Status:** Repot innehåller i nuläget bara specifikationen – ingen kod, `package.json` eller tester finns ännu. Följ roadmapen i SiteCheck.md (vecka 1 först: TypeScript-projekt, CLI, HTTP-request, status och response time). Uppdatera kommandona nedan när de faktiskt finns.
+**Status:** Milstolparna M1–M5 i [implementation.md](implementation.md) är klara (CLI, availability-, security-, SEO- och HTML-kontroller, scoring, text-/JSON-output, tester och CI). Pågående arbete är M6–M8 (blockerade sajter, WCAG-kontroller, flera sidor via sitemap) och därefter release (M9). Följ milstolparna i implementation.md.
 
 ## Kommandon
 
-Förväntade npm-scripts (skapa dem med exakt dessa namn när projektet sätts upp):
+npm-scripts (finns i `package.json`):
 
 ```bash
 npm run build        # tsc
@@ -32,16 +32,16 @@ Flöde: CLI → hämta sidan en gång → kör kontroller → scoring → output
 
 ### Designregler
 
-- **Hämta sidan en gång.** Availability-kontrollen gör huvudanropet; HTML-, SEO- och header-kontroller får svar/HTML som indata istället för att göra egna anrop. Endast `robots.txt`, `sitemap.xml` och HTTP→HTTPS-redirect kräver extra requests.
+- **Hämta sidan en gång.** Availability-kontrollen gör huvudanropet; HTML-, SEO- och header-kontroller får svar/HTML som indata istället för att göra egna anrop. Endast `robots.txt`, `sitemap.xml` (inkl. barn-sitemaps) och HTTP→HTTPS-redirect kräver extra requests. Med `--pages` (M8) hämtas varje extra sida också exakt en gång; regeln gäller per sida – kontrollerna gör aldrig egna anrop.
 - **Gemensamt check-gränssnitt.** Varje kontroll returnerar ett strukturerat resultat, t.ex. `{ id, category, status: 'pass' | 'warn' | 'fail', message, remediation?, points }`. Terminal- och JSON-output byggs från samma resultatlista. `remediation` behövs för målet "ge information om hur problem kan åtgärdas".
 - **Kontroller ska vara rena funktioner** där det går (indata: headers/HTML/status, utdata: resultat) så att de kan enhetstestas utan nätverk.
 - **En kontroll som kraschar får inte krascha hela körningen.** Fånga fel per kontroll och rapportera den som `fail`/`error`.
-- **Scoring** ligger helt i `src/scoring/score.ts`. Viktningarna i specen (Availability 20, Security 40, SEO 20, HTML 20) är preliminära – håll dem som konstanter på ett ställe. Betygsgränser: 90–100 Excellent, 75–89 Good, 50–74 Needs improvement, 0–49 Poor.
+- **Scoring** ligger helt i `src/scoring/score.ts`. Viktningarna i specen (Availability 20, Security 40, SEO 20, HTML 20) är preliminära och räknas om när `accessibility` ersätter `html` i M7 (se implementation.md avsnitt 6) – håll dem som konstanter på ett ställe. Betygsgränser: 90–100 Excellent, 75–89 Good, 50–74 Needs improvement, 0–49 Poor.
 
 ## CLI-kontrakt
 
 - `sitecheck <url> [--format text|json] [--min-score <n>]`, plus `--help` och `--version`.
-- Exit codes (definiera som konstanter): `0` ok, `1` score under `--min-score`, `2` ogiltig input/användarfel, `3` webbplatsen kunde inte nås eller internt fel.
+- Exit codes (definiera som konstanter): `0` ok, `1` score under `--min-score`, `2` ogiltig input/användarfel, `3` webbplatsen kunde inte nås, blockerar automatiska besökare eller internt fel.
 - Resultat skrivs till **stdout**, felmeddelanden och diagnostik till **stderr**, så att `--format json` alltid går att pipa.
 - Om URL saknar schema: anta `https://`.
 - JSON-outputen är ett publikt gränssnitt. Den ska innehålla `url`, `score`, betyg, per-kategori-score och en lista med checks (id, status, message) – inte bara booleans som exemplet i specen – och ändringar ska göras medvetet.
@@ -71,7 +71,14 @@ Flöde: CLI → hämta sidan en gång → kör kontroller → scoring → output
 
 ## Utanför scope för v1.0.0
 
-Performance (page size, Core Web Vitals, cache), fler WCAG-/ARIA-kontroller, REST API och GitHub Action. Bygg inte detta nu, men håll analysmotorn ren så att det går att lägga till senare.
+Performance (page size, Core Web Vitals, cache), REST API, GitHub Action, kontrast-/fokus-/tangentbordskontroller (kräver headless browser) och egen länk-crawling. Bygg inte detta nu, men håll analysmotorn ren så att det går att lägga till senare.
+
+**I scope (beslut 2026-10-28, se milstolparna M6–M8 i [implementation.md](implementation.md)):** blockeringsdetektering, statiska WCAG-kontroller (kategori `accessibility`) och analys av fler sidor via sitemap (`--pages`). Release är ett mål, inte en deadline.
+
+### Blockerade sajter
+
+- Blockerar sajten automatiska besökare (401/403/429, challenge-sida eller `robots.txt`-Disallow för `SiteCheck`/`*`) ska SiteCheck avbryta med ett tydligt `Access not allowed: <orsak>` på stderr, ingen score och exit code 3. Kringgå aldrig skyddet (inga UA-knep, ingen challenge-lösning).
+- Vid flera sidor: respektera `robots.txt`, hämta bara samma origin som startsidan, hoppa över blockerade sidor med orsak istället för att avbryta.
 
 ## Git
 

@@ -331,7 +331,18 @@ sitecheck/
 - [ ] Dokumentation
 - [ ] Testa mot riktiga webbplatser
 
-### Vecka 6 – Release
+### Vecka 6 – Blockering, tillgänglighet och flera sidor
+
+Tillagt 2026-10-28, före release. Detaljer i [implementation.md](implementation.md) (M6–M8).
+
+- [ ] Blockerade sajter: tydligt "access not allowed" med orsak i stället för score
+- [ ] Statiska WCAG-kontroller (länk-/knappnamn, formulärfält, iframe-titel, landmarks, ARIA, zoom, tabindex, meta refresh)
+- [ ] Ny kategori `accessibility` som ersätter `html` (`viewport-meta` flyttas till SEO)
+- [ ] Analysera fler sidor via sitemap (`--pages`)
+
+### Vecka 7 – Release
+
+Ett mål, inte en deadline.
 
 - [ ] Publicera npm-paket
 - [ ] Förbättra README
@@ -354,10 +365,13 @@ Ingår inte i den första versionen men kan implementeras senare.
 
 **Accessibility**
 
-- Fler WCAG-kontroller
-- Kontrastkontroller
-- Formulärfält
-- ARIA-attribut
+- Kontrastkontroller, fokusindikator och tangentbordsfällor (kräver headless browser)
+
+Statiska WCAG-kontroller (formulärfält, ARIA m.m.) är flyttade till vecka 6.
+
+**Flera sidor**
+
+- Länk-crawling utan sitemap (analys av sidor ur sitemap är flyttad till vecka 6)
 
 ### CI/CD
 
