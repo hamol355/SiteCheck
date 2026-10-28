@@ -219,15 +219,25 @@ export interface SeoInput extends PageInput {
   sitemap: TextResponse;
 }
 
-export function runSeoChecks(input: SeoInput): CheckResult[] {
-  const { robots, sitemap } = input;
+/** Checks that apply to every analysed page. */
+export function runSeoPageChecks(page: PageInput): CheckResult[] {
   return [
-    safeRunPage(TITLE, input, checkTitle),
-    safeRunPage(META_DESCRIPTION, input, checkMetaDescription),
-    safeRunPage(H1, input, checkH1),
-    safeRunPage(CANONICAL, input, checkCanonical),
-    safeRunPage(VIEWPORT, input, checkViewport),
-    safeRun(ROBOTS, () => checkRobotsTxt(robots)),
-    safeRun(SITEMAP, () => checkSitemap(sitemap)),
+    safeRunPage(TITLE, page, checkTitle),
+    safeRunPage(META_DESCRIPTION, page, checkMetaDescription),
+    safeRunPage(H1, page, checkH1),
+    safeRunPage(CANONICAL, page, checkCanonical),
+    safeRunPage(VIEWPORT, page, checkViewport),
   ];
+}
+
+/** Checks of the site as a whole, run once. */
+export function runSeoSiteChecks(input: Pick<SeoInput, 'robots' | 'sitemap'>): CheckResult[] {
+  return [
+    safeRun(ROBOTS, () => checkRobotsTxt(input.robots)),
+    safeRun(SITEMAP, () => checkSitemap(input.sitemap)),
+  ];
+}
+
+export function runSeoChecks(input: SeoInput): CheckResult[] {
+  return [...runSeoPageChecks(input), ...runSeoSiteChecks(input)];
 }

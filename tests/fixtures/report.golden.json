@@ -296,6 +296,7 @@
     "sitecheckVersion": "0.1.0",
     "analyzedAt": "2026-01-01T00:00:00.000Z",
     "responseTimeMs": 0,
-    "truncated": false
+    "truncated": false,
+    "pagesAnalyzed": 1
   }
 }

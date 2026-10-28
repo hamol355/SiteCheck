@@ -12,6 +12,8 @@ export interface FetchOptions {
   timeoutMs?: number;
   maxRedirects?: number;
   maxBodyBytes?: number;
+  /** Refuse redirects to another origin (before requesting them) with `CrossOriginRedirectError`. */
+  sameOrigin?: boolean;
 }
 
 export class NetworkError extends Error {
@@ -24,6 +26,10 @@ export class TimeoutError extends Error {
 
 export class TooManyRedirectsError extends Error {
   override name = 'TooManyRedirectsError';
+}
+
+export class CrossOriginRedirectError extends Error {
+  override name = 'CrossOriginRedirectError';
 }
 
 function describeCause(err: unknown): string {
@@ -159,6 +165,9 @@ async function fetchResource(
             `Redirect to unsupported protocol ${next.protocol} from ${current}`,
           );
         }
+        if (options.sameOrigin && next.origin !== new URL(url).origin) {
+          throw new CrossOriginRedirectError(`Redirects to another origin (${next.origin})`);
+        }
         redirects.push({ from: current, to: next.href, status: response.status });
         current = next.href;
         continue;
@@ -246,6 +255,16 @@ export interface BytesResponse {
   /** Raw body (not decoded, so gzip survives), capped at `maxBodyBytes`. */
   bytes: Buffer;
   truncated: boolean;
+}
+
+/** Decodes a `fetchBytes` result like `fetchText` would, so one response can serve both uses. */
+export function bytesToText(res: BytesResponse): TextResponse {
+  return {
+    url: res.url,
+    status: res.status,
+    contentType: res.contentType,
+    body: decoderFor(res.contentType).decode(res.bytes),
+  };
 }
 
 /** Fetches a resource of any content-type as raw bytes (e.g. a gzipped sitemap). Never throws. */

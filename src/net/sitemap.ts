@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import { isDisallowedByRobots } from '../checks/blocked.js';
 import { resolveSitemapUrl } from '../checks/seo.js';
 import type { TextResponse } from '../checks/types.js';
-import { fetchBytes } from './http.js';
+import { fetchBytes, type BytesResponse } from './http.js';
 
 /** Sitemap index nesting: the root may be an index, and so may its children (2 levels). */
 export const MAX_INDEX_DEPTH = 2;
@@ -71,23 +71,40 @@ function httpUrl(value: string, base?: string): URL | null {
   }
 }
 
+/** Fetches one sitemap file as raw bytes (default timeout for robots/sitemap requests). */
+function fetchSitemapFile(url: string): Promise<BytesResponse> {
+  return fetchBytes(url, { maxBodyBytes: MAX_SITEMAP_BYTES });
+}
+
 /**
- * Collects page URLs from the site's sitemap (the `Sitemap:` entry in robots.txt, otherwise
- * /sitemap.xml), following sitemap indexes. The sitemap files may live on another host, but only
- * http(s) is accepted. Never throws.
+ * Fetches the site's root sitemap: the `Sitemap:` entry in robots.txt, otherwise /sitemap.xml.
+ * The same response feeds the `sitemap-xml` check and `readSitemap`, so it is fetched once.
  */
-export async function readSitemap(startUrl: string, robots: TextResponse): Promise<SitemapResult> {
+export function fetchRootSitemap(startUrl: string, robots: TextResponse): Promise<BytesResponse> {
+  return fetchSitemapFile(resolveSitemapUrl(startUrl, robots));
+}
+
+/**
+ * Collects page URLs from the site's sitemap, following sitemap indexes. `root` is the response
+ * from `fetchRootSitemap`; it is fetched here if not given. The sitemap files may live on another
+ * host, but only http(s) is accepted. Never throws.
+ */
+export async function readSitemap(
+  startUrl: string,
+  robots: TextResponse,
+  root?: BytesResponse,
+): Promise<SitemapResult> {
   const notices: string[] = [];
   const urls: string[] = [];
-  const root = resolveSitemapUrl(startUrl, robots);
-  const queue: { url: string; depth: number }[] = [{ url: root, depth: 0 }];
-  const seen = new Set<string>([root]);
+  const rootUrl = resolveSitemapUrl(startUrl, robots);
+  const queue: { url: string; depth: number }[] = [{ url: rootUrl, depth: 0 }];
+  const seen = new Set<string>([rootUrl]);
   let fetched = 0;
   let childCapNoticed = false;
 
   while (queue.length > 0 && urls.length < MAX_SITEMAP_URLS) {
     const { url, depth } = queue.shift()!;
-    const res = await fetchBytes(url, { maxBodyBytes: MAX_SITEMAP_BYTES, timeoutMs: 10_000 });
+    const res = depth === 0 && root ? root : await fetchSitemapFile(url);
     fetched++;
     const xml = res.status === 200 ? decodeSitemapBytes(res.bytes) : null;
     const parsed = xml === null || res.truncated ? null : parseSitemapXml(xml);
