@@ -145,6 +145,9 @@ describe('built CLI', () => {
       'zoom-allowed',
       'tabindex',
       'meta-refresh',
+      'table-headers',
+      'autocomplete',
+      'media-autoplay',
     ]);
     expect(report.categories.accessibility.score).toBe(0);
 

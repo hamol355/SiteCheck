@@ -3,6 +3,7 @@ import * as cheerio from 'cheerio';
 import { describe, expect, it } from 'vitest';
 import {
   checkAriaValid,
+  checkAutocomplete,
   checkButtonName,
   checkFormLabel,
   checkHeadingStructure,
@@ -11,7 +12,9 @@ import {
   checkImageAlt,
   checkLandmarks,
   checkLinkName,
+  checkMediaAutoplay,
   checkMetaRefresh,
+  checkTableHeaders,
   checkTabindex,
   checkZoomAllowed,
   runAccessibilityChecks,
@@ -285,6 +288,64 @@ describe('meta-refresh', () => {
   });
 });
 
+describe('table-headers', () => {
+  it.each([
+    ['<table><tr><th>A</th></tr><tr><td>1</td></tr></table>', 'pass'],
+    ['<table><tr><td>1</td></tr></table>', 'fail'],
+    ['<table role="presentation"><tr><td>1</td></tr></table>', 'pass'],
+    ['<table role="none"><tr><td>1</td></tr></table>', 'pass'],
+    ['<table aria-hidden="true"><tr><td>1</td></tr></table>', 'pass'],
+    ['<p>no tables</p>', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkTableHeaders(load(html)).status).toBe(status);
+  });
+
+  it('warns when at most 20 % of the tables lack headers', () => {
+    const good = '<table><tr><th>A</th></tr></table>'.repeat(4);
+    const result = checkTableHeaders(load(`${good}<table><tr><td>1</td></tr></table>`));
+    expect(result.status).toBe('warn');
+    expect(result.message).toBe('1 of 5 tables have no header cells');
+  });
+});
+
+describe('autocomplete', () => {
+  it.each([
+    ['<input type="email" autocomplete="email">', 'pass'],
+    ['<input type="email">', 'fail'],
+    ['<input type="tel" autocomplete="off">', 'fail'],
+    ['<input type="email" autocomplete="on">', 'fail'],
+    ['<input type="text" name="first_name">', 'fail'],
+    ['<input type="text" name="first_name" autocomplete="given-name">', 'pass'],
+    ['<input id="postal-code">', 'fail'],
+    ['<input type="text" name="q">', 'pass'],
+    ['<input type="hidden" name="email">', 'pass'],
+    ['<input type="email" disabled>', 'pass'],
+    ['<input type="email" aria-hidden="true">', 'pass'],
+    ['<div hidden><input type="email"></div>', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkAutocomplete(load(html)).status).toBe(status);
+  });
+
+  it('warns when at most 20 % of the fields lack a token', () => {
+    const good = '<input type="email" autocomplete="email">'.repeat(4);
+    const result = checkAutocomplete(load(`${good}<input type="tel">`));
+    expect(result.status).toBe('warn');
+    expect(result.message).toBe('1 of 5 personal data fields have no autocomplete token');
+  });
+});
+
+describe('media-autoplay', () => {
+  it.each([
+    ['<video autoplay muted></video>', 'pass'],
+    ['<video controls></video>', 'pass'],
+    ['<video autoplay controls></video>', 'pass'],
+    ['<video autoplay></video>', 'fail'],
+    ['<audio autoplay></audio>', 'fail'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkMediaAutoplay(load(html)).status).toBe(status);
+  });
+});
+
 describe('runAccessibilityChecks', () => {
   const ids = [
     'html-lang',
@@ -299,6 +360,9 @@ describe('runAccessibilityChecks', () => {
     'zoom-allowed',
     'tabindex',
     'meta-refresh',
+    'table-headers',
+    'autocomplete',
+    'media-autoplay',
   ];
 
   it('passes everything for a good page', () => {
@@ -306,7 +370,7 @@ describe('runAccessibilityChecks', () => {
     expect(results.map((r) => r.id)).toEqual(ids);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
     expect(results.every((r) => r.category === 'accessibility')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(40);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(45);
   });
 
   it('gives every result a WCAG reference', () => {
@@ -332,6 +396,9 @@ describe('runAccessibilityChecks', () => {
       'zoom-allowed': 'fail',
       tabindex: 'fail',
       'meta-refresh': 'fail',
+      'table-headers': 'fail',
+      autocomplete: 'fail',
+      'media-autoplay': 'fail',
     });
   });
 

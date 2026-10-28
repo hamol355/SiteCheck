@@ -44,7 +44,7 @@ The report goes to **stdout**; errors and diagnostics go to **stderr**, so `--fo
 | Availability | `http-status`, `response-time`, `https-redirect`                                                                 |
 | Security     | `https`, `strict-transport-security`, `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy` |
 | SEO          | `title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`, `robots-txt`, `sitemap-xml`                |
-| Accessibility | `html-lang`, `image-alt`, `heading-structure`, `link-name`, `button-name`, `form-label`, `iframe-title`, `landmarks`, `aria-valid`, `zoom-allowed`, `tabindex`, `meta-refresh` |
+| Accessibility | `html-lang`, `image-alt`, `heading-structure`, `link-name`, `button-name`, `form-label`, `iframe-title`, `landmarks`, `aria-valid`, `zoom-allowed`, `tabindex`, `meta-refresh`, `table-headers`, `autocomplete`, `media-autoplay` |
 
 Each check ends as `pass`, `warn`, `fail`, `error` (the check itself crashed; other checks are unaffected) or `skip` (the check did not apply). If the page does not respond with 2xx, the checks that read the page content (`title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta` and all accessibility checks) are skipped, since an error or block page says nothing about the real page. `warn` and `fail` come with a `remediation` hint.
 
