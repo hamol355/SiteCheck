@@ -42,6 +42,7 @@ src/
   checks/seo.ts
   checks/html.ts
   checks/accessibility.ts  # (M7) WCAG-kontroller på statisk HTML
+  pages.ts              # (M8) analyzePage(), analyzeExtraPages(): per-sida-kontroller, samtidighet 4
   aggregate.ts          # (M8) slår ihop per-sida-resultat till ett resultat per check-id
   scoring/score.ts      # WEIGHTS, GRADES, calculateScore()
   output/terminal.ts
@@ -220,7 +221,7 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 - **Sitemap-filerna själva** får ligga på annan host (vanligt med CDN; `sitemap-xml` följer redan `Sitemap:`-direktivet dit), men bara `http:`/`https:` och bara URL:er från robots.txt eller ett `<sitemapindex>`. Same-origin-kravet gäller sidorna som analyseras. När SSRF-skyddet läggs till (REST API) gäller det även sitemap-anropen, eftersom allt går via `net/http.ts`.
 - **www / icke-www** räknas som olika origin (ingen gissning). Filtreras alla sitemap-URL:er bort skrivs en notis på stderr ("Sitemap has no URLs on <origin>; analysing the start page only") och bara startsidan analyseras.
 - **Urval:** startsidan alltid med; resten deterministiskt utspritt, grupperat på första path-segmentet så att olika mallar (blogg, produkt …) täcks. Sidor på toppnivå (`/about`, `/mitt-inlagg/`) delar en grupp, så att en platt sajt samplas utspritt i stället för alfabetiskt först. Samma indata ger samma urval.
-- **Hämtning:** `fetchPage` per sida, max 4 samtidiga. Misslyckad, blockerad eller icke-HTML-sida blir `skipped` med orsak och avbryter inte körningen. Redirect som leder utanför origin → hoppas över.
+- **Hämtning:** `fetchPage(url, { sameOrigin: true })` per sida, max 4 samtidiga. Misslyckad (inkl. icke-2xx), blockerad eller icke-HTML-sida blir `skipped` med orsak och avbryter inte körningen. Redirect som leder utanför origin avbryts innan målet begärs (`CrossOriginRedirectError`) → hoppas över.
 - **Vilka kontroller:** per sida kör `accessibility` och sid-kontrollerna i `seo` (`title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`). Per sajt, bara på startsidan: `availability`, `security`, `robots-txt`, `sitemap-xml`.
 - **Aggregering** (`aggregate.ts`) ger ett resultat per check-id så att scoring och `checks` i JSON är oförändrade: poäng = medelvärdet av sidornas poäng avrundat nedåt till heltal (`Math.floor`, samma riktning som `warn` = hälften nedåt; `points` förblir heltal); status `pass` om alla sidor passerar, `fail` om fler än hälften failar, annars `warn`. Status och poäng räknas oberoende av varandra – status är en sammanfattning för läsaren, poängen styr scoring – så t.ex. 5 pass + 5 fail ger `warn` med halva poängen; meddelande t.ex. "3 of 10 pages: images missing alt attributes". Detaljerna per sida ligger i det nya valfria fältet `pages` (additivt, `schemaVersion` förblir 1). `skip` sidor räknas inte.
 - Terminal: under varje icke-pass check visas de första 3 URL:erna som berörs plus "+N more".
@@ -383,7 +384,7 @@ Branch: `feature/sitemap-reader`, därefter `feature/multi-page`. Kan göras fö
 - [x] `net/http.ts`: `fetchBytes()` (rå `Buffer` + `truncated`) + tester
 - [x] `net/sitemap.ts`: parsning av urlset/sitemapindex, gzip med storlekstak, tak på antal sitemaps och URL:er, same-origin-filter, robots.txt-filter (se 5d)
 - [x] `samplePages()`: deterministiskt urval grupperat på path-segment
-- [ ] Refaktorera `analyze()`: `analyzePage()` för per-sida-kontroller, orkestrering med samtidighetstak 4
+- [x] Refaktorera `analyze()`: `analyzePage()` för per-sida-kontroller, orkestrering med samtidighetstak 4 (`src/pages.ts`)
 - [ ] `aggregate.ts` + `pages`/`meta.pagesAnalyzed` i `Report`
 - [ ] CLI: `--pages <n>` (validering, exit 2), stderr-notis när sitemap saknas, terminal visar berörda URL:er
 - [ ] Tester: sitemap-parser (index, gzip, zip-bomb, andra hosts), urval, aggregering (alla pass / blandat / alla fail / skippade), integrationstest mot testserver med 3 sidor och en blockerad sida

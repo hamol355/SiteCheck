@@ -1,10 +1,10 @@
-import * as cheerio from 'cheerio';
-import { runAccessibilityChecks } from './checks/accessibility.js';
 import { runAvailabilityChecks } from './checks/availability.js';
 import { BlockedError, detectBlock, robotsNotice } from './checks/blocked.js';
-import { resolveSitemapUrl, runSeoChecks } from './checks/seo.js';
+import { resolveSitemapUrl, runSeoSiteChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
+import type { Category } from './checks/types.js';
 import { fetchPage, fetchText, probeHttpRedirect } from './net/http.js';
+import { analyzePage } from './pages.js';
 import type { Report } from './report.js';
 import { calculateScore } from './scoring/score.js';
 import { VERSION } from './version.js';
@@ -19,7 +19,12 @@ export type {
 } from './checks/types.js';
 export { BlockedError } from './checks/blocked.js';
 export type { BlockReason } from './checks/blocked.js';
-export { NetworkError, TimeoutError, TooManyRedirectsError } from './net/http.js';
+export {
+  CrossOriginRedirectError,
+  NetworkError,
+  TimeoutError,
+  TooManyRedirectsError,
+} from './net/http.js';
 export type { Report } from './report.js';
 export type { Grade } from './scoring/score.js';
 
@@ -54,20 +59,14 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   const reason = detectBlock(page, robots);
   if (reason) throw new BlockedError(reason, page.status, page.finalUrl);
   const sitemap = await fetchText(resolveSitemapUrl(page.finalUrl, robots));
-  // Parse once. A parse failure must not abort the run; the page checks report it instead.
-  let $: cheerio.CheerioAPI | null = null;
-  if (page.html !== null) {
-    try {
-      $ = cheerio.load(page.html);
-    } catch {
-      $ = null;
-    }
-  }
+  const pageChecks = analyzePage(page);
+  const ofCategory = (category: Category) => pageChecks.filter((c) => c.category === category);
   const checks = [
     ...runAvailabilityChecks(page, probe),
     ...runSecurityChecks(page),
-    ...runSeoChecks({ $, status: page.status, robots, sitemap }),
-    ...runAccessibilityChecks({ $, status: page.status }),
+    ...ofCategory('seo'),
+    ...runSeoSiteChecks({ robots, sitemap }),
+    ...ofCategory('accessibility'),
   ];
   return {
     schemaVersion: 1,

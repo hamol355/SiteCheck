@@ -12,6 +12,8 @@ export interface FetchOptions {
   timeoutMs?: number;
   maxRedirects?: number;
   maxBodyBytes?: number;
+  /** Refuse redirects to another origin (before requesting them) with `CrossOriginRedirectError`. */
+  sameOrigin?: boolean;
 }
 
 export class NetworkError extends Error {
@@ -24,6 +26,10 @@ export class TimeoutError extends Error {
 
 export class TooManyRedirectsError extends Error {
   override name = 'TooManyRedirectsError';
+}
+
+export class CrossOriginRedirectError extends Error {
+  override name = 'CrossOriginRedirectError';
 }
 
 function describeCause(err: unknown): string {
@@ -158,6 +164,9 @@ async function fetchResource(
           throw new NetworkError(
             `Redirect to unsupported protocol ${next.protocol} from ${current}`,
           );
+        }
+        if (options.sameOrigin && next.origin !== new URL(url).origin) {
+          throw new CrossOriginRedirectError(`Redirects to another origin (${next.origin})`);
         }
         redirects.push({ from: current, to: next.href, status: response.status });
         current = next.href;

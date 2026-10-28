@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import {
+  CrossOriginRedirectError,
   fetchBytes,
   fetchPage,
   fetchText,
@@ -321,5 +322,37 @@ describe('fetchBytes', () => {
     const res = await fetchBytes(url, { timeoutMs: 500 });
     expect(res.status).toBeNull();
     expect(res.bytes.byteLength).toBe(0);
+  });
+});
+
+describe('fetchPage with sameOrigin', () => {
+  it('follows same-origin redirects', async () => {
+    server = await startTestServer({
+      '/a': { status: 301, headers: { location: '/b' } },
+      '/b': { body: '<p>ok</p>' },
+    });
+    const page = await fetchPage(`${server.url}/a`, { sameOrigin: true });
+    expect(page.finalUrl).toBe(`${server.url}/b`);
+  });
+
+  it('refuses a redirect to another origin before requesting it', async () => {
+    let hit = false;
+    const other = await startTestServer({
+      '/': (_req, res) => {
+        hit = true;
+        res.end('x');
+      },
+    });
+    try {
+      server = await startTestServer({
+        '/a': { status: 302, headers: { location: `${other.url}/` } },
+      });
+      await expect(fetchPage(`${server.url}/a`, { sameOrigin: true })).rejects.toBeInstanceOf(
+        CrossOriginRedirectError,
+      );
+      expect(hit).toBe(false);
+    } finally {
+      await other.close();
+    }
   });
 });
