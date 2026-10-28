@@ -99,6 +99,29 @@ describe('fetchPage', () => {
       ]);
     });
 
+    it('resolves a relative Location against the current URL after a host change', async () => {
+      const other = await startTestServer({
+        '/hop': { status: 302, headers: { location: '/end' } },
+        '/end': { body: 'other host' },
+      });
+      try {
+        // `/end` exists on both servers, so resolving against the original URL would land on origin.
+        const origin = await startTestServer({
+          '/start': { status: 301, headers: { location: `${other.url}/hop` } },
+          '/end': { body: 'wrong host' },
+        });
+        try {
+          const page = await fetchPage(`${origin.url}/start`);
+          expect(page.finalUrl).toBe(`${other.url}/end`);
+          expect(page.html).toBe('other host');
+        } finally {
+          await origin.close();
+        }
+      } finally {
+        await other.close();
+      }
+    });
+
     it('throws TooManyRedirectsError on a redirect loop', async () => {
       await expect(fetchPage(`${server.url}/loop`)).rejects.toBeInstanceOf(TooManyRedirectsError);
     });

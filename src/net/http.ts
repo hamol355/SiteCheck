@@ -144,7 +144,7 @@ async function fetchResource(
         }
         let next: URL;
         try {
-          next = new URL(location, url);
+          next = new URL(location, current);
         } catch {
           throw new NetworkError(
             `Invalid redirect location "${quoteUntrusted(location)}" from ${current}`,
