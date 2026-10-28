@@ -25,6 +25,7 @@ export function makeResult(
     maxPoints: def.maxPoints,
   };
   if (remediation !== undefined) result.remediation = remediation;
+  if (def.wcag !== undefined) result.wcag = def.wcag;
   return result;
 }
 

@@ -106,8 +106,8 @@ describe('built CLI', () => {
     const report = JSON.parse(r.stdout) as Report;
     expect(report.schemaVersion).toBe(1);
     expect(Object.keys(report.categories).sort()).toEqual([
+      'accessibility',
       'availability',
-      'html',
       'security',
       'seo',
     ]);
@@ -121,7 +121,7 @@ describe('built CLI', () => {
     expect(report.checks.find((c) => c.id === 'http-status')).toMatchObject({ status: 'fail' });
   });
 
-  it('skips the page checks for a 404 and shows HTML as not checked', async () => {
+  it('skips the page checks for a 404 and shows accessibility as not checked', async () => {
     const json = JSON.parse(
       (await sitecheck([`${server.url}/missing`, '--format', 'json'])).stdout,
     );
@@ -132,15 +132,24 @@ describe('built CLI', () => {
       'meta-description',
       'h1',
       'canonical-url',
-      'html-lang',
       'viewport-meta',
+      'html-lang',
       'image-alt',
       'heading-structure',
+      'link-name',
+      'button-name',
+      'form-label',
+      'iframe-title',
+      'landmarks',
+      'aria-valid',
+      'zoom-allowed',
+      'tabindex',
+      'meta-refresh',
     ]);
-    expect(report.categories.html.score).toBe(0);
+    expect(report.categories.accessibility.score).toBe(0);
 
     const text = await sitecheck([`${server.url}/missing`]);
-    expect(text.stdout).toContain('HTML (not checked)');
+    expect(text.stdout).toContain('Accessibility (not checked)');
     expect(text.stdout).toContain('– Skipped html-lang: page responded with HTTP 404');
     expect(text.stderr).toBe('');
   });

@@ -2,10 +2,10 @@ import type { Category, CheckResult } from '../checks/types.js';
 
 /** Category weights; they sum to the maximum score of 100. Preliminary, tune after manual testing. */
 export const WEIGHTS: Record<Category, number> = {
-  availability: 20,
-  security: 40,
+  availability: 15,
+  security: 35,
   seo: 20,
-  html: 20,
+  accessibility: 30,
 };
 
 /** Grade boundaries, highest first. */

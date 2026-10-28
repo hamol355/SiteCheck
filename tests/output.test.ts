@@ -10,10 +10,10 @@ const report: Report = {
   score: 77,
   grade: 'Good',
   categories: {
-    availability: { score: 20, max: 20 },
-    security: { score: 30, max: 40 },
+    availability: { score: 15, max: 15 },
+    security: { score: 30, max: 35 },
     seo: { score: 15, max: 20 },
-    html: { score: 12, max: 20 },
+    accessibility: { score: 12, max: 30 },
   },
   checks: [
     {
@@ -44,7 +44,7 @@ const report: Report = {
     },
     {
       id: 'html-lang',
-      category: 'html',
+      category: 'accessibility',
       status: 'error',
       message: 'Check failed to run: boom',
       points: 0,
@@ -64,10 +64,10 @@ describe('renderTerminal', () => {
 
   it('groups checks by category with category scores', () => {
     const order = [
-      'Availability (20/20)',
-      'Security (30/40)',
+      'Availability (15/15)',
+      'Security (30/35)',
       'SEO (15/20)',
-      'HTML (not checked)',
+      'Accessibility (not checked)',
     ].map((title) => out.indexOf(title));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -90,6 +90,14 @@ describe('renderTerminal', () => {
     expect(out).toContain('URL: http://example.com/');
     expect(out).toContain('Final URL: https://example.com/');
     expect(out).toContain('Score: 77/100 (Good)');
+  });
+
+  it('shows the WCAG references of a check', () => {
+    const check = { ...report.checks[0]!, wcag: ['2.4.4', '4.1.2'] };
+    expect(renderTerminal({ ...report, checks: [check] })).toContain(
+      '✓ Responded with HTTP 200 (WCAG 2.4.4, 4.1.2)',
+    );
+    expect(out).not.toContain('WCAG');
   });
 
   it('shows skipped checks with a dash', () => {

@@ -1,4 +1,4 @@
-export type Category = 'availability' | 'security' | 'seo' | 'html';
+export type Category = 'availability' | 'security' | 'seo' | 'accessibility';
 /** `skip`: the check did not apply (e.g. page checks on an error page) and is not scored. */
 export type Status = 'pass' | 'warn' | 'fail' | 'error' | 'skip';
 
@@ -6,6 +6,8 @@ export interface CheckDefinition {
   id: string;
   category: Category;
   maxPoints: number;
+  /** WCAG 2.2 success criteria the check relates to, e.g. ['2.4.4']. */
+  wcag?: string[];
 }
 
 export interface CheckResult {
@@ -16,6 +18,7 @@ export interface CheckResult {
   remediation?: string;
   points: number;
   maxPoints: number;
+  wcag?: string[];
 }
 
 export interface FetchedPage {

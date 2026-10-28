@@ -17,6 +17,7 @@ const TITLE = def('title', 4);
 const META_DESCRIPTION = def('meta-description', 4);
 const H1 = def('h1', 3);
 const CANONICAL = def('canonical-url', 3);
+const VIEWPORT = def('viewport-meta', 5);
 const ROBOTS = def('robots-txt', 3);
 const SITEMAP = def('sitemap-xml', 3);
 
@@ -115,6 +116,24 @@ export function checkCanonical($: CheerioAPI): CheckResult {
   return makeResult(CANONICAL, 'pass', `Canonical URL is ${quoteUntrusted(href)}`);
 }
 
+export function checkViewport($: CheerioAPI): CheckResult {
+  const content = $('meta[name="viewport" i]').first().attr('content');
+  const remediation =
+    'Add <meta name="viewport" content="width=device-width, initial-scale=1"> to the <head>.';
+  if (content === undefined) {
+    return makeResult(VIEWPORT, 'fail', 'Missing viewport meta tag', remediation);
+  }
+  if (!/width\s*=\s*device-width/i.test(content)) {
+    return makeResult(
+      VIEWPORT,
+      'warn',
+      `Viewport meta tag lacks width=device-width (${quoteUntrusted(content)})`,
+      remediation,
+    );
+  }
+  return makeResult(VIEWPORT, 'pass', 'Viewport meta tag is set');
+}
+
 function looksLikeHtml(response: TextResponse): boolean {
   if (response.contentType?.toLowerCase().includes('text/html')) return true;
   return /^\s*<(!doctype|html)/i.test(response.body);
@@ -207,6 +226,7 @@ export function runSeoChecks(input: SeoInput): CheckResult[] {
     safeRunPage(META_DESCRIPTION, input, checkMetaDescription),
     safeRunPage(H1, input, checkH1),
     safeRunPage(CANONICAL, input, checkCanonical),
+    safeRunPage(VIEWPORT, input, checkViewport),
     safeRun(ROBOTS, () => checkRobotsTxt(robots)),
     safeRun(SITEMAP, () => checkSitemap(sitemap)),
   ];

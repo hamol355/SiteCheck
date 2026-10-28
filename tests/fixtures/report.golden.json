@@ -2,24 +2,24 @@
   "schemaVersion": 1,
   "url": "http://TEST/",
   "finalUrl": "http://TEST/",
-  "score": 64,
+  "score": 69,
   "grade": "Needs improvement",
   "categories": {
     "availability": {
-      "score": 14,
-      "max": 20
+      "score": 11,
+      "max": 15
     },
     "security": {
-      "score": 10,
-      "max": 40
+      "score": 9,
+      "max": 35
     },
     "seo": {
       "score": 20,
       "max": 20
     },
-    "html": {
-      "score": 20,
-      "max": 20
+    "accessibility": {
+      "score": 30,
+      "max": 30
     }
   },
   "checks": [
@@ -133,6 +133,14 @@
       "maxPoints": 3
     },
     {
+      "id": "viewport-meta",
+      "category": "seo",
+      "status": "pass",
+      "message": "Viewport meta tag is set",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
       "id": "robots-txt",
       "category": "seo",
       "status": "pass",
@@ -150,35 +158,111 @@
     },
     {
       "id": "html-lang",
-      "category": "html",
+      "category": "accessibility",
       "status": "pass",
       "message": "Document language is \"en\"",
       "points": 5,
-      "maxPoints": 5
-    },
-    {
-      "id": "viewport-meta",
-      "category": "html",
-      "status": "pass",
-      "message": "Viewport meta tag is set",
-      "points": 5,
-      "maxPoints": 5
+      "maxPoints": 5,
+      "wcag": ["3.1.1"]
     },
     {
       "id": "image-alt",
-      "category": "html",
+      "category": "accessibility",
       "status": "pass",
       "message": "All 2 images have alt attributes",
       "points": 6,
-      "maxPoints": 6
+      "maxPoints": 6,
+      "wcag": ["1.1.1"]
     },
     {
       "id": "heading-structure",
-      "category": "html",
+      "category": "accessibility",
       "status": "pass",
       "message": "Heading levels are in order",
       "points": 4,
-      "maxPoints": 4
+      "maxPoints": 4,
+      "wcag": ["1.3.1"]
+    },
+    {
+      "id": "link-name",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "All 1 links have an accessible name",
+      "points": 4,
+      "maxPoints": 4,
+      "wcag": ["2.4.4", "4.1.2"]
+    },
+    {
+      "id": "button-name",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "All 1 buttons have an accessible name",
+      "points": 3,
+      "maxPoints": 3,
+      "wcag": ["4.1.2"]
+    },
+    {
+      "id": "form-label",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "All 1 form fields have a label",
+      "points": 5,
+      "maxPoints": 5,
+      "wcag": ["1.3.1", "3.3.2"]
+    },
+    {
+      "id": "iframe-title",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No iframes to check",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["4.1.2"]
+    },
+    {
+      "id": "landmarks",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "Page has one main landmark",
+      "points": 3,
+      "maxPoints": 3,
+      "wcag": ["1.3.1", "2.4.1"]
+    },
+    {
+      "id": "aria-valid",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "ARIA usage is valid",
+      "points": 4,
+      "maxPoints": 4,
+      "wcag": ["4.1.2"]
+    },
+    {
+      "id": "zoom-allowed",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "Viewport allows zooming",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["1.4.4"]
+    },
+    {
+      "id": "tabindex",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No positive tabindex values",
+      "points": 1,
+      "maxPoints": 1,
+      "wcag": ["2.4.3"]
+    },
+    {
+      "id": "meta-refresh",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No delayed meta refresh",
+      "points": 1,
+      "maxPoints": 1,
+      "wcag": ["2.2.1"]
     }
   ],
   "meta": {
