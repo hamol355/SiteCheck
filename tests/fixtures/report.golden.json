@@ -263,6 +263,33 @@
       "points": 1,
       "maxPoints": 1,
       "wcag": ["2.2.1"]
+    },
+    {
+      "id": "table-headers",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No tables to check",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["1.3.1"]
+    },
+    {
+      "id": "autocomplete",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No personal data fields to check",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["1.3.5"]
+    },
+    {
+      "id": "media-autoplay",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No media plays sound automatically without controls",
+      "points": 1,
+      "maxPoints": 1,
+      "wcag": ["1.4.2"]
     }
   ],
   "meta": {

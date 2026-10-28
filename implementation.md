@@ -203,9 +203,12 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 | `zoom-allowed`   | 1.4.4      | 2   | viewport har inte `user-scalable=no`/`0`, och `maximum-scale` saknas eller är ≥ 2           | –                                       | `user-scalable=no`/`0` eller `maximum-scale` < 2 |
 | `tabindex`       | 2.4.3      | 1   | inget `tabindex` > 0                                                                        | –                                       | finns                      |
 | `meta-refresh`   | 2.2.1      | 1   | ingen `<meta http-equiv=refresh>` med fördröjning > 0                                       | –                                       | finns                      |
+| `table-headers`  | 1.3.1      | 2   | alla datatabeller har `<th>` (`role=presentation/none` och `aria-hidden` undantas)          | ≤ 20 % saknar                           | > 20 % saknar              |
+| `autocomplete`   | 1.3.5      | 2   | e-post/tel och fält vars name/id är personuppgifter har `autocomplete`-token (inte `on`/`off`); dolda/disabled undantas | ≤ 20 % saknar | > 20 % saknar   |
+| `media-autoplay` | 1.4.2      | 1   | ingen `<video>`/`<audio autoplay>` utan `muted` eller `controls`                            | –                                       | finns                      |
 
 - Innehåll under `aria-hidden="true"` (skiftlägesokänsligt) ger inget namn, och länkar, knappar och iframes där kontrolleras inte. `<a href role=button>` räknas bara som knapp. `main` med `hidden` på sig själv eller en förälder räknas inte. `meta-refresh` med fördröjning över 20 h är undantagen (WCAG 2.2.1). Roller från DPUB-ARIA och Graphics-ARIA är giltiga.
-- Max-poäng är preliminära och justeras efter manuell testrunda. Fas B (om tid finns): tabellrubriker (1.3.1), `autocomplete` på personuppgiftsfält (1.3.5), `<video autoplay>` utan `muted` (1.4.2).
+- Max-poäng är preliminära och justeras efter manuell testrunda. Fas B (klar): `table-headers`, `autocomplete` och `media-autoplay` enligt tabellen ovan. Kategorins max blir 45. Kända begränsningar: `<th>` i en nästlad tabell räknas även för den yttre, och `autocomplete` täcker inte `<select>`/`<textarea>` eller prefixade namn som `billing_email`.
 - Går inte att göra statiskt och lovas inte: kontrast (1.4.3), fokusindikator, tangentbordsfällor. Kräver headless browser (Playwright + axe-core) och är ett separat beslut; listas som begränsning i README.
 
 ## 5d. Flera sidor via sitemap (M8)
@@ -369,7 +372,7 @@ Branch: `feature/a11y-checks`, därefter `feature/a11y-category`.
 - [x] `checks/html.ts` upphör; kontrollerna flyttas till `accessibility.ts` resp. `seo.ts`, testerna likaså
 - [x] Tester med bra/dåliga fixtures per check, inkl. kantfall (`alt` i länk, omslutande label, dolda fält); uppdatera `good.html`, `bad.html` och golden-JSON
 - [x] Scoring-tester för den nya kategorin; README (checks, score-modell, begränsningar: ingen kontrast/fokus)
-- [ ] Fas B om tid finns: tabellrubriker, `autocomplete`, autoplay
+- [x] Fas B om tid finns: tabellrubriker, `autocomplete`, autoplay
 
 Klart när: rapporten har en accessibility-sektion med WCAG-referenser, och `npm test` är grönt.
 

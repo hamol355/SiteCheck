@@ -29,6 +29,9 @@ const ARIA_VALID = def('aria-valid', 4, ['4.1.2']);
 const ZOOM = def('zoom-allowed', 2, ['1.4.4']);
 const TABINDEX = def('tabindex', 1, ['2.4.3']);
 const META_REFRESH = def('meta-refresh', 1, ['2.2.1']);
+const TABLE_HEADERS = def('table-headers', 2, ['1.3.1']);
+const AUTOCOMPLETE = def('autocomplete', 2, ['1.3.5']);
+const MEDIA_AUTOPLAY = def('media-autoplay', 1, ['1.4.2']);
 
 /** Non-abstract WAI-ARIA 1.2 roles. */
 const ARIA_ROLES = new Set(
@@ -433,6 +436,74 @@ export function checkMetaRefresh($: CheerioAPI): CheckResult {
   );
 }
 
+export function checkTableHeaders($: CheerioAPI): CheckResult {
+  // Tables with role=presentation/none are layout tables and need no headers.
+  const tables = $('table').filter((_, el) => {
+    const role = $(el).attr('role')?.trim().toLowerCase();
+    return role !== 'presentation' && role !== 'none' && !isAriaHidden($(el));
+  });
+  const bad = tables.filter((_, el) => $(el).find('th').length === 0).length;
+  return ratioResult(
+    TABLE_HEADERS,
+    tables.length,
+    bad,
+    'tables',
+    'have header cells',
+    'have no header cells',
+    'Mark header cells with <th> (and scope where needed), or add role="presentation" to layout tables.',
+  );
+}
+
+/** Field names that collect personal data covered by WCAG 1.3.5. */
+const PERSONAL_FIELD_NAME =
+  /^(?:(?:first|last|given|family|full|user)[-_ ]?name|name|e-?mail|email[-_ ]?address|phone|tel|telephone|mobile|address|street|city|zip|postal[-_ ]?code|postcode|country|username|cc-?number|birthday|bday)$/i;
+const PERSONAL_INPUT_TYPES = new Set(['email', 'tel']);
+
+export function checkAutocomplete($: CheerioAPI): CheckResult {
+  const fields = $('input').filter((_, node) => {
+    const el = $(node);
+    if (isAriaHidden(el) || el.is('[disabled]') || el.closest('[hidden]').length > 0) return false;
+    const type = (el.attr('type') ?? 'text').toLowerCase();
+    if (PERSONAL_INPUT_TYPES.has(type)) return true;
+    if (type !== 'text' && type !== 'search') return false;
+    return [el.attr('name'), el.attr('id')].some((v) => PERSONAL_FIELD_NAME.test((v ?? '').trim()));
+  });
+  // "on" and "off" do not identify the field's purpose, so they do not count.
+  const bad = fields.filter((_, node) => {
+    const value = ($(node).attr('autocomplete') ?? '').trim().toLowerCase();
+    return value === '' || value === 'off' || value === 'on';
+  }).length;
+  return ratioResult(
+    AUTOCOMPLETE,
+    fields.length,
+    bad,
+    'personal data fields',
+    'have an autocomplete token',
+    'have no autocomplete token',
+    'Add an autocomplete token such as autocomplete="email" or "given-name" to fields that collect personal data.',
+  );
+}
+
+export function checkMediaAutoplay($: CheerioAPI): CheckResult {
+  // controls gives the user a way to pause or stop the audio, which satisfies 1.4.2.
+  const bad = $('video[autoplay], audio[autoplay]').filter(
+    (_, el) => !$(el).is('[muted], [controls]'),
+  ).length;
+  if (bad === 0) {
+    return makeResult(
+      MEDIA_AUTOPLAY,
+      'pass',
+      'No media plays sound automatically without controls',
+    );
+  }
+  return makeResult(
+    MEDIA_AUTOPLAY,
+    'fail',
+    `${bad} ${bad === 1 ? 'media element plays' : 'media elements play'} sound automatically without controls`,
+    'Remove autoplay, or add muted or controls so the sound can be stopped.',
+  );
+}
+
 export function runAccessibilityChecks(page: PageInput): CheckResult[] {
   return [
     safeRunPage(LANG, page, checkHtmlLang),
@@ -447,5 +518,8 @@ export function runAccessibilityChecks(page: PageInput): CheckResult[] {
     safeRunPage(ZOOM, page, checkZoomAllowed),
     safeRunPage(TABINDEX, page, checkTabindex),
     safeRunPage(META_REFRESH, page, checkMetaRefresh),
+    safeRunPage(TABLE_HEADERS, page, checkTableHeaders),
+    safeRunPage(AUTOCOMPLETE, page, checkAutocomplete),
+    safeRunPage(MEDIA_AUTOPLAY, page, checkMediaAutoplay),
   ];
 }
