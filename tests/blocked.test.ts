@@ -7,6 +7,7 @@ const page = (overrides: Partial<FetchedPage> = {}): FetchedPage => ({
   finalUrl: 'https://example.com/',
   status: 200,
   headers: {},
+  setCookies: [],
   html: '<html><body>Hello</body></html>',
   truncated: false,
   responseTimeMs: 10,

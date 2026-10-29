@@ -140,6 +140,8 @@ describe('built CLI', () => {
     const report = json as Report;
     const skipped = report.checks.filter((c) => c.status === 'skip').map((c) => c.id);
     expect(skipped).toEqual([
+      'tls-certificate',
+      'mixed-content',
       'title',
       'meta-description',
       'h1',

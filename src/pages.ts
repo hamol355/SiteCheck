@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { runAccessibilityChecks } from './checks/accessibility.js';
 import { BLOCK_MESSAGES, detectBlock } from './checks/blocked.js';
 import { runSeoPageChecks } from './checks/seo.js';
+import { runSecurityPageChecks } from './checks/security.js';
 import type { CheckResult, FetchedPage, TextResponse } from './checks/types.js';
 import { fetchPage, type BytesResponse } from './net/http.js';
 import { filterPageUrls, readSitemap, samplePages } from './net/sitemap.js';
@@ -34,11 +35,17 @@ function parse(html: string | null): cheerio.CheerioAPI | null {
 
 /**
  * Runs the checks that apply to every analysed page: the page checks in `seo`, then
- * `accessibility`. Pure: no network.
+ * `accessibility` and the HTML-based `security` checks. Pure: no network.
  */
-export function analyzePage(page: Pick<FetchedPage, 'html' | 'status'>): CheckResult[] {
+export function analyzePage(
+  page: Pick<FetchedPage, 'html' | 'status' | 'headers' | 'finalUrl'>,
+): CheckResult[] {
   const input = { $: parse(page.html), status: page.status };
-  return [...runSeoPageChecks(input), ...runAccessibilityChecks(input)];
+  return [
+    ...runSeoPageChecks(input),
+    ...runAccessibilityChecks(input),
+    ...runSecurityPageChecks({ ...input, headers: page.headers, finalUrl: page.finalUrl }),
+  ];
 }
 
 export const DEAD_PAGE_REMEDIATION =
@@ -48,8 +55,8 @@ export const DEAD_PAGE_REMEDIATION =
  * A sitemap URL that answers 4xx/5xx is a real problem with the site, so unlike the start page
  * (where `http-status` covers it) every page check fails instead of being skipped.
  */
-function deadPageChecks(status: number): CheckResult[] {
-  return analyzePage({ html: null, status }).map((check) => ({
+function deadPageChecks(status: number, url: string): CheckResult[] {
+  return analyzePage({ html: null, status, headers: {}, finalUrl: url }).map((check) => ({
     ...check,
     status: 'fail',
     message: `Page responded with HTTP ${status}`,
@@ -70,7 +77,8 @@ export async function fetchAndAnalyzePage(url: string, robots: TextResponse): Pr
   const skip = (skipped: string): PageResult => ({ url, status: page.status, skipped, checks: [] });
   const block = detectBlock(page, robots);
   if (block) return skip(`Access not allowed: ${BLOCK_MESSAGES[block]}`);
-  if (page.status >= 400) return { url, status: page.status, checks: deadPageChecks(page.status) };
+  if (page.status >= 400)
+    return { url, status: page.status, checks: deadPageChecks(page.status, url) };
   if (page.status < 200 || page.status >= 300) return skip(`Responded with HTTP ${page.status}`);
   if (page.html === null) return skip('Not an HTML page');
   return { url, status: page.status, checks: analyzePage(page) };

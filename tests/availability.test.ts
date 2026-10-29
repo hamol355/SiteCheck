@@ -14,6 +14,7 @@ function page(overrides: Partial<FetchedPage> = {}): FetchedPage {
     finalUrl: 'https://example.com/',
     status: 200,
     headers: {},
+    setCookies: [],
     html: '<html></html>',
     truncated: false,
     responseTimeMs: 100,

@@ -4,7 +4,7 @@ import { runSeoSiteChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
 import type { Category } from './checks/types.js';
 import { aggregatePages } from './aggregate.js';
-import { bytesToText, fetchPage, fetchText, probeHttpRedirect } from './net/http.js';
+import { bytesToText, fetchPage, fetchText, probeHttpRedirect, probeTls } from './net/http.js';
 import { fetchRootSitemap } from './net/sitemap.js';
 import {
   analyzeExtraPages,
@@ -23,6 +23,7 @@ export type {
   FetchedPage,
   HttpRedirectProbe,
   TextResponse,
+  TlsProbe,
   Category,
   Status,
 } from './checks/types.js';
@@ -67,9 +68,13 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
     throw err;
   }
   // robots.txt only needs the final URL, so it runs alongside the probe; the sitemap needs robots.txt.
-  const [probe, robots] = await Promise.all([
+  const finalUrl = new URL(page.finalUrl);
+  const [probe, robots, tls] = await Promise.all([
     probing,
     fetchText(new URL('/robots.txt', page.finalUrl).href),
+    finalUrl.protocol === 'https:'
+      ? probeTls(finalUrl.hostname, finalUrl.port ? Number(finalUrl.port) : 443)
+      : null,
   ]);
   const notice = robotsNotice(robots);
   if (notice) notify(notice);
@@ -92,7 +97,8 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   const ofCategory = (category: Category) => pageChecks.filter((c) => c.category === category);
   const checks = [
     ...runAvailabilityChecks(page, probe),
-    ...runSecurityChecks(page),
+    ...runSecurityChecks({ ...page, tls }),
+    ...ofCategory('security'),
     ...ofCategory('seo'),
     ...runSeoSiteChecks({ robots, sitemap: bytesToText(rootSitemap) }),
     ...ofCategory('accessibility'),

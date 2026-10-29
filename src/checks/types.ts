@@ -27,6 +27,8 @@ export interface FetchedPage {
   status: number;
   /** Lowercase header names. */
   headers: Record<string, string>;
+  /** Each `Set-Cookie` header on its own (`fetch` joins them in `headers`, and `Expires` holds commas). */
+  setCookies: string[];
   /** null when the response content-type is not HTML. */
   html: string | null;
   truncated: boolean;
@@ -57,4 +59,19 @@ export interface HttpRedirectProbe {
   location: string | null;
   /** http:// to http:// redirects followed before the last response. */
   redirects: { from: string; to: string; status: number }[];
+}
+
+export interface TlsProbe {
+  host: string;
+  port: number;
+  /** Why no handshake completed (refused, timeout, ...); null when one did. */
+  error: string | null;
+  /** Whether the chain is trusted by Node's CA store and matches the host. */
+  authorized: boolean;
+  /** OpenSSL code such as `CERT_HAS_EXPIRED` or `DEPTH_ZERO_SELF_SIGNED_CERT`; null when authorized. */
+  authorizationError: string | null;
+  /** Negotiated protocol, e.g. `TLSv1.3`. */
+  protocol: string | null;
+  /** Leaf certificate expiry (ISO 8601). */
+  validTo: string | null;
 }

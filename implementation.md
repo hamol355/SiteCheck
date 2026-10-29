@@ -472,10 +472,10 @@ Klart när: `sitecheck <url> --pages 10` analyserar flera sidor, och `--pages 1`
 
 Branch: `feature/security-checks`, `feature/seo-checks`, `feature/availability-checks`, `feature/a11y-checks-2` (en per kategori; fas A först i varje). Beslut 2026-10-29: görs före release.
 
-- [ ] `FetchedPage.setCookies: string[]` från `headers.getSetCookie()` (`net/http.ts`) + test med flera `Set-Cookie` och `Expires`
-- [ ] `net/http.ts`: `probeTls()` (5 s, läser kedja, giltighet, protokoll) + test mot lokal TLS-testserver med självsignerat och utgånget cert
-- [ ] Fas A: `tls-certificate`, `clickjacking`, `cookie-flags`, `mixed-content`, `indexable`, `soft-404`, `html-lang-valid` (se 5e)
-- [ ] Prober körs parallellt (TLS, soft-404 tillsammans med https-proben och robots.txt); en misslyckad probe ger `skip`/`error`, inte avbruten körning
+- [x] `FetchedPage.setCookies: string[]` från `headers.getSetCookie()` (`net/http.ts`) + test med flera `Set-Cookie` och `Expires`
+- [x] `net/http.ts`: `probeTls()` (5 s, läser kedja, giltighet, protokoll) + test mot lokal TLS-testserver med självsignerat cert (utgånget cert och kort giltighet testas på `checkTlsCertificate` med injicerad tid)
+- [ ] Fas A: ~~`tls-certificate`, `clickjacking`, `cookie-flags`, `mixed-content`~~ (security, klara på `feature/security-checks`), `indexable`, `soft-404`, `html-lang-valid` (se 5e)
+- [ ] Prober körs parallellt (TLS klar; soft-404 tillsammans med https-proben och robots.txt); en misslyckad probe ger `skip`/`error`, inte avbruten körning
 - [ ] HTML-baserade säkerhetskontroller och `indexable` körs per sida med `--pages`; `PASS_SUMMARIES` för nya ids
 - [ ] Fas B om tid finns: övriga kontroller i 5e, inklusive `duplicate-titles`/`duplicate-descriptions` i `aggregate.ts`
 - [ ] Tester per kontroll med bra/dåliga fixtures; uppdatera `good.html`, `bad.html`, testservern och golden-JSON

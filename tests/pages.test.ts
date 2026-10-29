@@ -24,13 +24,14 @@ async function serve(routes: Parameters<typeof startTestServer>[0]): Promise<Tes
   return server;
 }
 
+const PAGE_URL = 'https://example.com/';
 const noRobots: TextResponse = { url: '', status: 404, contentType: null, body: '' };
 
 describe('analyzePage', () => {
   it('runs the seo page checks and then accessibility, nothing site-wide', () => {
-    const checks = analyzePage({ html: good, status: 200 });
+    const checks = analyzePage({ html: good, status: 200, headers: {}, finalUrl: PAGE_URL });
     const categories = [...new Set(checks.map((c) => c.category))];
-    expect(categories).toEqual(['seo', 'accessibility']);
+    expect(categories).toEqual(['seo', 'accessibility', 'security']);
     const ids = checks.map((c) => c.id);
     expect(ids).toContain('title');
     expect(ids).not.toContain('robots-txt');
@@ -38,7 +39,7 @@ describe('analyzePage', () => {
   });
 
   it('skips the page checks on an error status', () => {
-    const checks = analyzePage({ html: good, status: 500 });
+    const checks = analyzePage({ html: good, status: 500, headers: {}, finalUrl: PAGE_URL });
     expect(checks.every((c) => c.status === 'skip')).toBe(true);
   });
 });
@@ -78,7 +79,7 @@ describe('fetchAndAnalyzePage', () => {
     expect(res.status).toBe(status);
     expect(res.skipped).toBeUndefined();
     expect(res.checks.map((c) => c.id)).toEqual(
-      analyzePage({ html: good, status: 200 }).map((c) => c.id),
+      analyzePage({ html: good, status: 200, headers: {}, finalUrl: PAGE_URL }).map((c) => c.id),
     );
     for (const check of res.checks) {
       expect(check).toMatchObject({

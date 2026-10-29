@@ -29,6 +29,7 @@ export const PASS_SUMMARIES: Readonly<Record<string, string>> = {
   'table-headers': 'Data tables have headers',
   autocomplete: 'Personal data fields have autocomplete',
   'media-autoplay': 'No autoplaying media with sound',
+  'mixed-content': 'No resources are loaded over HTTP',
 };
 
 /** E.g. "Exactly one <h1> on all 6 pages"; unknown ids fall back to "Passes on all 6 pages". */
