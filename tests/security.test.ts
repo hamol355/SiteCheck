@@ -290,8 +290,25 @@ describe('permissions-policy', () => {
 });
 
 describe('runSecurityChecks', () => {
+  const NOW = new Date('2026-06-01T00:00:00.000Z');
+  const good = () => ({
+    headers: { ...goodHeaders, 'x-frame-options': 'DENY' },
+    finalUrl: HTTPS_URL,
+    setCookies: [] as string[],
+    tls: {
+      host: 'example.com',
+      port: 443,
+      error: null,
+      authorized: true,
+      authorizationError: null,
+      protocol: 'TLSv1.3',
+      validTo: '2026-12-01T00:00:00.000Z',
+    },
+    now: NOW,
+  });
+
   it('passes everything with good headers over https', () => {
-    const results = runSecurityChecks({ headers: goodHeaders, finalUrl: HTTPS_URL });
+    const results = runSecurityChecks(good());
     expect(results.map((r) => r.id)).toEqual([
       'https',
       'strict-transport-security',
@@ -299,20 +316,32 @@ describe('runSecurityChecks', () => {
       'x-content-type-options',
       'referrer-policy',
       'permissions-policy',
+      'tls-certificate',
+      'clickjacking',
+      'cookie-flags',
     ]);
-    expect(results.every((r) => r.status === 'pass')).toBe(true);
-    expect(results.reduce((sum, r) => sum + r.maxPoints, 0)).toBe(40);
+    expect(results.filter((r) => r.status !== 'pass').map((r) => r.id)).toEqual([]);
+    expect(results.reduce((sum, r) => sum + r.maxPoints, 0)).toBe(57);
   });
 
-  it('gives only failures for no headers over http', () => {
-    const results = runSecurityChecks({ headers: {}, finalUrl: 'http://example.com/' });
-    expect(results.every((r) => r.status === 'fail')).toBe(true);
-    expect(results.every((r) => r.remediation)).toBe(true);
+  it('gives failures for no headers over http, except where the check does not apply', () => {
+    const results = runSecurityChecks({
+      headers: {},
+      finalUrl: 'http://example.com/',
+      setCookies: [],
+      tls: null,
+    });
+    const ids = (status: string) => results.filter((r) => r.status === status).map((r) => r.id);
+    expect(ids('skip')).toEqual(['tls-certificate']);
+    expect(ids('pass')).toEqual(['cookie-flags']);
+    expect(ids('fail')).toHaveLength(results.length - 2);
+    expect(results.filter((r) => r.status === 'fail').every((r) => r.remediation)).toBe(true);
   });
 
   it('reports an error result instead of throwing for a bad URL', () => {
-    const results = runSecurityChecks({ headers: goodHeaders, finalUrl: 'not a url' });
+    const results = runSecurityChecks({ ...good(), finalUrl: 'not a url' });
     expect(results.find((r) => r.id === 'https')?.status).toBe('error');
+    expect(results.find((r) => r.id === 'tls-certificate')?.status).toBe('error');
     expect(results.find((r) => r.id === 'content-security-policy')?.status).toBe('pass');
   });
 });

@@ -46,7 +46,12 @@ describe('aggregateCheck', () => {
   });
 
   it('has a pass summary for every per-page check', () => {
-    const ids = analyzePage({ html: '<html></html>', status: 200 }).map((c) => c.id);
+    const ids = analyzePage({
+      html: '<html></html>',
+      status: 200,
+      headers: {},
+      finalUrl: 'https://example.com/',
+    }).map((c) => c.id);
     expect(ids.filter((id) => PASS_SUMMARIES[id] === undefined)).toEqual([]);
   });
 

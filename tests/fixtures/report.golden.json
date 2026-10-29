@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "url": "http://TEST/",
   "finalUrl": "http://TEST/",
-  "score": 69,
+  "score": 71,
   "grade": "Needs improvement",
   "categories": {
     "availability": {
@@ -10,7 +10,7 @@
       "max": 15
     },
     "security": {
-      "score": 9,
+      "score": 10,
       "max": 35
     },
     "seo": {
@@ -99,6 +99,39 @@
       "points": 0,
       "maxPoints": 4,
       "remediation": "Add header: Permissions-Policy: camera=(), microphone=(), geolocation=()"
+    },
+    {
+      "id": "tls-certificate",
+      "category": "security",
+      "status": "skip",
+      "message": "Skipped tls-certificate: page is not served over HTTPS",
+      "points": 0,
+      "maxPoints": 8
+    },
+    {
+      "id": "clickjacking",
+      "category": "security",
+      "status": "fail",
+      "message": "Page can be framed by any site (no frame-ancestors or X-Frame-Options)",
+      "points": 0,
+      "maxPoints": 5,
+      "remediation": "Add header: Content-Security-Policy: frame-ancestors 'self' (or X-Frame-Options: SAMEORIGIN) to stop other sites from framing the page."
+    },
+    {
+      "id": "cookie-flags",
+      "category": "security",
+      "status": "pass",
+      "message": "No cookies are set",
+      "points": 4,
+      "maxPoints": 4
+    },
+    {
+      "id": "mixed-content",
+      "category": "security",
+      "status": "skip",
+      "message": "Skipped mixed-content: page is not served over HTTPS",
+      "points": 0,
+      "maxPoints": 5
     },
     {
       "id": "title",

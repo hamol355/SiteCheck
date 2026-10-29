@@ -1,4 +1,6 @@
-import type { FetchedPage, HttpRedirectProbe, TextResponse } from '../checks/types.js';
+import { connect, type TLSSocket } from 'node:tls';
+import { isIP } from 'node:net';
+import type { FetchedPage, HttpRedirectProbe, TextResponse, TlsProbe } from '../checks/types.js';
 import { quoteUntrusted } from '../text.js';
 import { USER_AGENT } from '../version.js';
 
@@ -196,6 +198,7 @@ async function fetchResource(
         finalUrl: current,
         status: response.status,
         headers,
+        setCookies: response.headers.getSetCookie(),
         body,
         truncated,
         responseTimeMs,
@@ -351,4 +354,73 @@ export async function probeHttpRedirect(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export const TLS_TIMEOUT_MS = 5_000;
+
+/**
+ * Completes a TLS handshake with `host:port` and reads the certificate and protocol; no HTTP
+ * request is sent. The chain is checked against Node's built-in CA store (missing intermediates
+ * are not fetched), but a bad certificate is reported rather than rejected. Never throws.
+ */
+export function probeTls(
+  host: string,
+  port = 443,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<TlsProbe> {
+  const bare = host.replace(/^\[|\]$/g, '');
+  const failed = (error: string): TlsProbe => ({
+    host: bare,
+    port,
+    error,
+    authorized: false,
+    authorizationError: null,
+    protocol: null,
+    validTo: null,
+  });
+  return new Promise((resolve) => {
+    let socket: TLSSocket | undefined;
+    let settled = false;
+    const finish = (probe: TlsProbe) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+      socket?.destroy();
+      resolve(probe);
+    };
+    const onAbort = () => finish(failed('aborted'));
+    const timer = setTimeout(
+      () => finish(failed(`timed out after ${options.timeoutMs ?? TLS_TIMEOUT_MS} ms`)),
+      options.timeoutMs ?? TLS_TIMEOUT_MS,
+    );
+    if (options.signal?.aborted) return onAbort();
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      socket = connect({
+        host: bare,
+        port,
+        // SNI must be a hostname; Node warns when it is an IP address.
+        ...(isIP(bare) === 0 && { servername: bare }),
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1',
+      });
+    } catch (err) {
+      return finish(failed(describeCause(err)));
+    }
+    socket.once('secureConnect', () => {
+      const cert = socket!.getPeerCertificate();
+      const authError = socket!.authorizationError;
+      finish({
+        host: bare,
+        port,
+        error: null,
+        authorized: socket!.authorized,
+        authorizationError: socket!.authorized ? null : String(authError),
+        protocol: socket!.getProtocol(),
+        validTo: cert && cert.valid_to ? new Date(cert.valid_to).toISOString() : null,
+      });
+    });
+    socket.once('error', (err) => finish(failed(describeCause(err))));
+  });
 }
