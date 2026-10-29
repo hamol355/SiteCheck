@@ -1,6 +1,6 @@
 # Implementationsplan – SiteCheck v1.0.0
 
-> Status 2026-10-28: M1–M5 klara. M6 (blockerade sajter), M7 (WCAG) och M8 (flera sidor via sitemap) läggs till före release. Release (M9) är ett mål, inte en deadline.
+> Status 2026-10-29: M1–M8 klara. M9 (fler kontroller, se 5e) läggs till före release. Release (M10) är ett mål, inte en deadline.
 
 Det här dokumentet bryter ner roadmapen i [SiteCheck.md](SiteCheck.md) till konkreta steg. Regler och konventioner finns i [CLAUDE.md](CLAUDE.md); vid konflikt gäller CLAUDE.md.
 
@@ -95,7 +95,7 @@ export interface Report {
 
 Planerade tillägg (M6–M8), alla additiva utom kategoribytet `html` → `accessibility` i M7.
 
-**`schemaVersion`:** förblir `1`. Inget är publicerat än (0.1.0, npm-release i M9), så det finns inga konsumenter att bryta; schema 1 är det som släpps i v1.0.0. Från v1.0.0 är schemat fryst: icke-additiva ändringar höjer `schemaVersion`. Släpps 1.0.0 före M7 blir M7:s kategoribyte `schemaVersion: 2`.
+**`schemaVersion`:** förblir `1`. Inget är publicerat än (0.1.0, npm-release i M10), så det finns inga konsumenter att bryta; schema 1 är det som släpps i v1.0.0. Från v1.0.0 är schemat fryst: icke-additiva ändringar höjer `schemaVersion`. Släpps 1.0.0 före M7 blir M7:s kategoribyte `schemaVersion: 2`.
 
 ```ts
 // M7: Category blir 'availability' | 'security' | 'seo' | 'accessibility' ('html' tas bort). CheckDefinition/CheckResult får wcag?: string[] (t.ex. ['2.4.4']).
@@ -105,6 +105,7 @@ export class BlockedError extends Error { reason: BlockReason; status: number | 
 // M8: Report får
 //   pages?: { url: string; status: number | null; skipped?: string; checks: Pick<CheckResult,'id'|'status'|'message'>[] }[];
 //   meta.pagesAnalyzed: number;
+// M9: FetchedPage får setCookies: string[] (från headers.getSetCookie(), eftersom fetch slår ihop Set-Cookie). Report oförändrad – bara nya check-ids.
 ```
 
 Poäng per status: `pass` = maxPoints, `warn` = hälften (avrundat nedåt), `fail`/`error` = 0. `error`-kontroller räknas dock inte alls i scoring (se avsnitt 6). Helper `makeResult(def, status, message, remediation?)` räknar ut `points` så att kontroller aldrig hanterar poäng själva.
@@ -227,6 +228,81 @@ Ny kategori `accessibility` som **ersätter `html`**, endast statisk HTML via Ch
 - **Aggregering** (`aggregate.ts`) ger ett resultat per check-id så att scoring och `checks` i JSON är oförändrade: poäng = medelvärdet av sidornas poäng avrundat nedåt till heltal (`Math.floor`, samma riktning som `warn` = hälften nedåt; `points` förblir heltal); status `pass` om alla sidor passerar, `fail` om fler än hälften failar, annars `warn`. Status och poäng räknas oberoende av varandra – status är en sammanfattning för läsaren, poängen styr scoring – så t.ex. 5 pass + 5 fail ger `warn` med halva poängen; meddelande t.ex. "3 of 10 pages: images missing alt attributes". Detaljerna per sida ligger i det nya valfria fältet `pages` (additivt, `schemaVersion` förblir 1), som bara finns när `--pages` > 1; `meta.pagesAnalyzed` finns alltid (startsidan plus extra sidor som inte skippats). Skippade sidor räknas inte, och inte heller sidor där kontrollen blev `error`/`skip`. Räknas bara en sida returneras dess resultat oförändrat (därför ger `--pages 1` samma `checks` som tidigare). Alla sidor pass ger en sammanfattning per check-id, t.ex. "Exactly one <h1> on all N pages" (`PASS_SUMMARIES`; okänt id ger "Passes on all N pages"); annars beskriver meddelandet och `remediation` första sidan som failar (annars första som varnar).
 - Terminal: under varje icke-pass check visas de första 3 URL:erna som berörs plus "+N more".
 - Körtid och belastning: default 1 sida, begränsad samtidighet, hårt tak 50.
+
+## 5e. Fler kontroller (M9)
+
+Beslut 2026-10-29: release skjuts upp för fler kontroller. Alla följer designreglerna: inga headless browser, sidan hämtas fortfarande en gång, och varje kontroll är en ren funktion av headers/HTML/probe-resultat. Kategorivikterna i avsnitt 6 ändras inte – nya kontroller höjer bara kategorins max, som normaliseras mot vikten. Befintliga sajter får därför något annorlunda score; noteras i CHANGELOG. Max-poängen är preliminära och justeras efter manuell testrunda.
+
+**Fas A** (mest värde per insats) är markerad med **A**; resten är fas B och görs om tid finns.
+
+### Security
+
+| id                       | fas | max | pass                                                                                     | warn                                                                    | fail                                                                    |
+| ------------------------ | --- | --- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `tls-certificate`        | A   | 8   | giltig kedja, ≥ 30 dagar kvar, TLS ≥ 1.2                                                 | 7–29 dagar kvar                                                         | ogiltig kedja/hostname, < 7 dagar kvar eller utgånget, TLS < 1.2         |
+| `clickjacking`           | A   | 5   | CSP `frame-ancestors` (ej `*`) eller `X-Frame-Options: DENY`/`SAMEORIGIN`                | bara `X-Frame-Options: ALLOW-FROM` (ignoreras av webbläsare), eller `frame-ancestors *` | saknas                                                 |
+| `cookie-flags`           | A   | 4   | alla cookies har `Secure`, `HttpOnly` och `SameSite`, eller inga cookies                 | någon saknar `HttpOnly` eller `SameSite`                                | någon saknar `Secure` på https, eller `SameSite=None` utan `Secure`     |
+| `mixed-content`          | A   | 5   | inga `http://`-resurser på en https-sida                                                 | bara passivt innehåll (`img`, `audio`, `video`, `source`)               | aktivt innehåll (`script`, `link rel=stylesheet`, `iframe`, `object`, `embed`) |
+| `subresource-integrity`  | B   | 3   | alla cross-origin `<script src>`/`<link rel=stylesheet>` har `integrity`, eller inga     | ≤ 50 % saknar                                                           | > 50 % saknar                                                           |
+| `form-action-https`      | B   | 3   | inga `<form action="http://…">` på en https-sida                                         | –                                                                       | finns                                                                   |
+| `info-disclosure`        | B   | 2   | varken `Server` med versionsnummer eller `X-Powered-By`                                  | något av dem                                                            | –                                                                       |
+| `cross-origin-isolation` | B   | 2   | `Cross-Origin-Opener-Policy` finns                                                       | saknas                                                                  | –                                                                       |
+| `security-txt`           | B   | 1   | `/.well-known/security.txt` ger 200, inte HTML, har `Contact:` och `Expires:` i framtiden | finns men `Expires:` saknas/passerat eller `Contact:` saknas           | saknas                                                                  |
+
+- **`tls-certificate`** kräver en egen anslutning: `probeTls(host, port)` i `net/http.ts` (`tls.connect` med `servername`, `rejectUnauthorized: false` så att `authorized`/`authorizationError`, `getPeerCertificate()` och `getProtocol()` kan läsas; 5 s timeout). Körs mot slutlig URL:s host parallellt med https-proben och robots.txt. Ingen HTTP-request skickas, bara handskakningen. Slutlig URL över `http:` → `skip` (`https` failar redan). Node använder sitt inbyggda CA-lager och hämtar inte saknade intermediates (AIA) som webbläsare gör, så en ofullständig kedja ger fail – korrekt, eftersom andra klienter än webbläsare också misslyckas; meddelandet säger det.
+- **`clickjacking`**: bara CSP i header räknas (`frame-ancestors` ignoreras i `<meta>`). Flera policyer: räcker att en begränsar. `Content-Security-Policy-Report-Only` räknas inte.
+- **`cookie-flags`**: `fetch` slår ihop `Set-Cookie` med `, ` och `Expires` innehåller kommatecken, så `FetchedPage` får ett nytt fält `setCookies: string[]` från `headers.getSetCookie()`. Meddelandet räknar cookies, t.ex. "2 of 5 cookies missing HttpOnly". `HttpOnly` är bara warn eftersom vissa cookies läses av JS med flit.
+- **`mixed-content`**, **`subresource-integrity`**, **`form-action-https`** läser HTML och körs per sida med `--pages` (som sid-kontrollerna i SEO). Övriga säkerhetskontroller körs bara på startsidan. `<base href>` respekteras vid upplösning av relativa URL:er; `upgrade-insecure-requests` i CSP gör `mixed-content` till pass.
+- **`security-txt`** hämtas från slutlig origin med `fetchText` (5 s, 1 MB), parallellt med robots.txt.
+
+### SEO
+
+| id                       | fas | max | pass                                                                    | warn                                                    | fail                                     |
+| ------------------------ | --- | --- | ----------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------- |
+| `indexable`              | A   | 5   | varken `<meta name=robots>` eller `X-Robots-Tag` innehåller `noindex`/`none` | `nofollow` utan `noindex`                          | `noindex` eller `none`                   |
+| `open-graph`             | B   | 2   | `og:title`, `og:description` och `og:image` finns                       | någon av dem finns                                      | ingen                                    |
+| `structured-data`        | B   | 2   | alla `<script type="application/ld+json">` parsar och har `@context`/`@type`, eller inga sådana | –                                | något block parsar inte eller saknar `@type` |
+| `hreflang`               | B   | 2   | alla `hreflang` är giltiga BCP 47-taggar (eller `x-default`) med absolut `href`, eller inga | –                                     | något ogiltigt                           |
+| `charset`                | B   | 1   | `charset` i `Content-Type` eller `<meta charset>` inom de första 1024 byten | –                                                   | saknas                                   |
+| `doctype`                | B   | 1   | `<!DOCTYPE html>` först i dokumentet                                    | annan doctype                                           | saknas (quirks mode)                     |
+| `duplicate-titles`       | B   | 2   | inga två analyserade sidor har samma `<title>`                          | ≤ 20 % av sidorna delar titel                           | > 20 %                                   |
+| `duplicate-descriptions` | B   | 1   | som ovan för `meta description`                                         | ≤ 20 %                                                  | > 20 %                                   |
+
+- **`indexable`** körs per sida. `X-Robots-Tag` med user-agent-prefix (`googlebot: noindex`) räknas bara för `*`/utan prefix; `<meta name=googlebot>` ignoreras. Startsidan med `noindex` är ett vanligt kvarglömt staging-läge, därför fail.
+- **`duplicate-*`** är de första kontrollerna över flera sidor: de körs i `aggregate.ts` efter att alla sidor analyserats, inte per sida, och ger `skip` ("Needs --pages 2 or more") när bara en sida räknas. Sidor utan titel/beskrivning ingår inte (det fångar `title`/`meta-description`). Meddelandet listar första dubbletten, `pages[].checks` får inget nytt.
+- `canonical-url` utökas: canonical till annan origin ger warn.
+
+### Availability
+
+| id                | fas | max | pass                                                          | warn                                                              | fail                         |
+| ----------------- | --- | --- | ------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------- |
+| `soft-404`        | A   | 4   | en slumpad path ger 404 eller 410                             | ger 3xx (t.ex. till startsidan) eller annan 4xx                   | ger 2xx                      |
+| `redirect-chain`  | B   | 2   | högst 1 redirect till slutlig URL                             | 2–3                                                               | 4–5                          |
+| `www-consistency` | B   | 3   | den andra varianten (www ↔ icke-www) redirectar till slutlig host, eller finns inte i DNS | svarar 2xx utan redirect (duplicerat innehåll) | –          |
+
+- **`soft-404`**: `GET <origin>/sitecheck-404-<slumpad hex>` med `fetchPage` (5 s, body kastas), parallellt med övriga prober. Pathen respekterar robots.txt; är den disallowed → `skip`. Nätverksfel → `skip`.
+- **`redirect-chain`** använder `FetchedPage.redirects`, ingen extra request.
+- **`www-consistency`** byggs som `probeHttpRedirect` (följer inte målet, max 5 s). Körs bara när slutlig host börjar med `www.` eller har exakt två labels (`example.com`); övriga (t.ex. `blog.example.com`, `example.co.uk`) → `skip`, ingen gissning om publika suffix.
+
+### Accessibility
+
+| id                | WCAG          | fas | max | pass                                                                                        | warn                          | fail                              |
+| ----------------- | ------------- | --- | --- | ------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------- |
+| `html-lang-valid` | 3.1.1         | A   | 2   | `lang` på `<html>` är en välformad BCP 47-tagg                                              | –                             | ogiltig (t.ex. `english`, `en_US`) |
+| `empty-heading`   | 1.3.1, 2.4.6  | B   | 2   | alla `h1`–`h6`/`role=heading` har tillgängligt namn                                          | –                             | någon är tom                      |
+| `skip-link`       | 2.4.1         | B   | 1   | första fokuserbara elementet är en `<a href="#id">` till ett befintligt id                    | saknas men `<main>` finns     | –                                 |
+| `list-structure`  | 1.3.1         | B   | 1   | `<ul>`/`<ol>` har bara `li`/`script`/`template` som barn, `<li>` ligger i lista              | –                             | brott                             |
+| `duplicate-id`    | 4.1.2         | B   | 2   | inga dubbla id bland element som pekas ut av `label for`, `aria-labelledby/describedby/controls` | –                         | dubblett                          |
+
+- **`html-lang-valid`**: syntaxkontroll enligt BCP 47 (inget register över språkkoder). Saknat `lang` → `skip` så att `html-lang` inte straffas två gånger.
+- `image-alt` utökas till `input[type=image]`, `<area href>` och `svg[role=img]` (namn via `aria-label`/`aria-labelledby`/`<title>`).
+- 4.1.1 Parsing är borttaget i WCAG 2.2; `duplicate-id` motiveras av att dubbletter bryter referenserna (4.1.2) och kontrollerar därför bara refererade id.
+
+### Medvetet utanför
+
+- **Exponerade filer** (`/.git/HEAD`, `/.env` …): gör SiteCheck till en sårbarhetsskanner i stället för "vad en besökare ser". Produktbeslut, inte en kontroll.
+- **DNS** (SPF, DMARC, CAA, DNSSEC): handlar om e-post och domänen snarare än sajten; ev. egen kategori senare.
+- **Komprimering, HTTP/2, cache-headers**: performance, fortfarande utanför scope (avsnitt 11).
 
 ## 6. Scoring
 
@@ -392,9 +468,24 @@ Branch: `feature/sitemap-reader`, därefter `feature/multi-page`. Kan göras fö
 
 Klart när: `sitecheck <url> --pages 10` analyserar flera sidor, och `--pages 1` ger samma rapport som idag.
 
-### M9 – Release
+### M9 – Fler kontroller
 
-Branch: `release/1.0.0`. Ett mål, inte en deadline: görs när M6 och helst M7–M8 är klara, annars kan 1.0.0 släppas utan M7–M8.
+Branch: `feature/security-checks`, `feature/seo-checks`, `feature/availability-checks`, `feature/a11y-checks-2` (en per kategori; fas A först i varje). Beslut 2026-10-29: görs före release.
+
+- [ ] `FetchedPage.setCookies: string[]` från `headers.getSetCookie()` (`net/http.ts`) + test med flera `Set-Cookie` och `Expires`
+- [ ] `net/http.ts`: `probeTls()` (5 s, läser kedja, giltighet, protokoll) + test mot lokal TLS-testserver med självsignerat och utgånget cert
+- [ ] Fas A: `tls-certificate`, `clickjacking`, `cookie-flags`, `mixed-content`, `indexable`, `soft-404`, `html-lang-valid` (se 5e)
+- [ ] Prober körs parallellt (TLS, soft-404 tillsammans med https-proben och robots.txt); en misslyckad probe ger `skip`/`error`, inte avbruten körning
+- [ ] HTML-baserade säkerhetskontroller och `indexable` körs per sida med `--pages`; `PASS_SUMMARIES` för nya ids
+- [ ] Fas B om tid finns: övriga kontroller i 5e, inklusive `duplicate-titles`/`duplicate-descriptions` i `aggregate.ts`
+- [ ] Tester per kontroll med bra/dåliga fixtures; uppdatera `good.html`, `bad.html`, testservern och golden-JSON
+- [ ] README (checks, begränsningar: TLS mot Nodes CA-lager, soft-404-requesten), CHANGELOG-notis om ändrad score
+
+Klart när: fas A finns i rapporten med `remediation`, och `npm test` är grönt.
+
+### M10 – Release
+
+Branch: `release/1.0.0`. Ett mål, inte en deadline: görs när M6 och helst M7–M9 är klara, annars kan 1.0.0 släppas utan dem.
 
 - [ ] Bekräfta att paketnamnet från M1 fortfarande är ledigt
 - [ ] `package.json`: `files: ["dist"]`, `bin`, verifiera shebang i `dist/cli/index.js`, `repository`, `keywords`, `license`
@@ -430,3 +521,5 @@ Klart när: paketet kan köras med `npx` från registret på ren maskin.
 Performance (page size, Core Web Vitals, cache), REST API, GitHub Action, JS-rendering.
 
 Flyttat in i scope 2026-10-28 (M6–M8): blockeringsdetektering, statiska WCAG-kontroller och flera sidor via sitemap. Fortfarande utanför: kontrast, fokus- och tangentbordskontroller (kräver headless browser), egen länk-crawling utan sitemap.
+
+Tillagt 2026-10-29 (M9): fler kontroller i befintliga kategorier, se 5e. Fortfarande utanför: prober efter exponerade filer, DNS-kontroller, komprimering/HTTP/2/cache.
