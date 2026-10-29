@@ -75,3 +75,10 @@ export interface TlsProbe {
   /** Leaf certificate expiry (ISO 8601). */
   validTo: string | null;
 }
+
+export interface StatusProbe {
+  /** The URL that was requested. */
+  url: string;
+  /** Status of the response (redirects are not followed), or null if the request failed. */
+  status: number | null;
+}

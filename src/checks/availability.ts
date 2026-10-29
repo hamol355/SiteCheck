@@ -1,5 +1,11 @@
 import { makeResult, safeRun } from './run.js';
-import type { CheckDefinition, CheckResult, FetchedPage, HttpRedirectProbe } from './types.js';
+import type {
+  CheckDefinition,
+  CheckResult,
+  FetchedPage,
+  HttpRedirectProbe,
+  StatusProbe,
+} from './types.js';
 
 export const RESPONSE_TIME_GOOD_MS = 500;
 export const RESPONSE_TIME_SLOW_MS = 1500;
@@ -10,6 +16,7 @@ const RESPONSE_TIME: CheckDefinition = {
   category: 'availability',
   maxPoints: 6,
 };
+const SOFT_404: CheckDefinition = { id: 'soft-404', category: 'availability', maxPoints: 4 };
 const HTTPS_REDIRECT: CheckDefinition = {
   id: 'https-redirect',
   category: 'availability',
@@ -98,10 +105,53 @@ export function checkHttpsRedirect(probe: HttpRedirectProbe): CheckResult {
   );
 }
 
-export function runAvailabilityChecks(page: FetchedPage, probe: HttpRedirectProbe): CheckResult[] {
+/** `probe` is null when the random path is disallowed by robots.txt and so was not requested. */
+export function checkSoft404(probe: StatusProbe | null): CheckResult {
+  if (probe === null) {
+    return makeResult(SOFT_404, 'skip', 'Skipped soft-404: robots.txt disallows the probe path');
+  }
+  const { status } = probe;
+  if (status === null) {
+    return makeResult(SOFT_404, 'skip', 'Skipped soft-404: the probe request failed');
+  }
+  if (status === 404 || status === 410) {
+    return makeResult(SOFT_404, 'pass', `Missing pages respond with HTTP ${status}`);
+  }
+  const remediation =
+    'Return HTTP 404 (or 410) for URLs that do not exist, so search engines do not index error pages.';
+  if (status >= 200 && status < 300) {
+    return makeResult(
+      SOFT_404,
+      'fail',
+      `A page that does not exist responds with HTTP ${status} (soft 404)`,
+      remediation,
+    );
+  }
+  if (status >= 300 && status < 400) {
+    return makeResult(
+      SOFT_404,
+      'warn',
+      `A page that does not exist redirects (HTTP ${status}) instead of returning 404`,
+      remediation,
+    );
+  }
+  return makeResult(
+    SOFT_404,
+    'warn',
+    `A page that does not exist responds with HTTP ${status} instead of 404`,
+    remediation,
+  );
+}
+
+export function runAvailabilityChecks(
+  page: FetchedPage,
+  probe: HttpRedirectProbe,
+  soft404: StatusProbe | null = null,
+): CheckResult[] {
   return [
     safeRun(HTTP_STATUS, () => checkHttpStatus(page)),
     safeRun(RESPONSE_TIME, () => checkResponseTime(page)),
     safeRun(HTTPS_REDIRECT, () => checkHttpsRedirect(probe)),
+    safeRun(SOFT_404, () => checkSoft404(soft404)),
   ];
 }

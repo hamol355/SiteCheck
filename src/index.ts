@@ -1,10 +1,18 @@
+import { randomBytes } from 'node:crypto';
 import { runAvailabilityChecks } from './checks/availability.js';
-import { BlockedError, detectBlock, robotsNotice } from './checks/blocked.js';
+import { BlockedError, detectBlock, isDisallowedByRobots, robotsNotice } from './checks/blocked.js';
 import { runSeoSiteChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
 import type { Category } from './checks/types.js';
 import { aggregatePages } from './aggregate.js';
-import { bytesToText, fetchPage, fetchText, probeHttpRedirect, probeTls } from './net/http.js';
+import {
+  bytesToText,
+  fetchPage,
+  fetchText,
+  probeHttpRedirect,
+  probeStatus,
+  probeTls,
+} from './net/http.js';
 import { fetchRootSitemap } from './net/sitemap.js';
 import {
   analyzeExtraPages,
@@ -80,8 +88,14 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   if (notice) notify(notice);
   const reason = detectBlock(page, robots);
   if (reason) throw new BlockedError(reason, page.status, page.finalUrl);
+  // The soft-404 probe path respects robots.txt like any other request, so it needs robots.txt first.
+  const soft404Url = new URL(`/sitecheck-404-${randomBytes(8).toString('hex')}`, page.finalUrl)
+    .href;
   // Fetched once: it feeds both the sitemap-xml check and the page selection.
-  const rootSitemap = await fetchRootSitemap(page.finalUrl, robots);
+  const [rootSitemap, soft404] = await Promise.all([
+    fetchRootSitemap(page.finalUrl, robots),
+    isDisallowedByRobots(robots, soft404Url) ? null : probeStatus(soft404Url),
+  ]);
 
   const startPage: PageResult = {
     url: page.finalUrl,
@@ -96,7 +110,7 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   const pageChecks = aggregatePages(pages);
   const ofCategory = (category: Category) => pageChecks.filter((c) => c.category === category);
   const checks = [
-    ...runAvailabilityChecks(page, probe),
+    ...runAvailabilityChecks(page, probe, soft404),
     ...runSecurityChecks({ ...page, tls }),
     ...ofCategory('security'),
     ...ofCategory('seo'),

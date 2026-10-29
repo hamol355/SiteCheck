@@ -20,6 +20,7 @@ const CANONICAL = def('canonical-url', 3);
 const VIEWPORT = def('viewport-meta', 5);
 const ROBOTS = def('robots-txt', 3);
 const SITEMAP = def('sitemap-xml', 3);
+const INDEXABLE = def('indexable', 5);
 
 /** Collapses whitespace runs like browsers do for document.title, so line breaks and indentation are not counted. */
 function normalizeText(text: string): string {
@@ -134,6 +135,54 @@ export function checkViewport($: CheerioAPI): CheckResult {
   return makeResult(VIEWPORT, 'pass', 'Viewport meta tag is set');
 }
 
+/**
+ * Robots directives of an `X-Robots-Tag` header that apply to all crawlers. `fetch` joins repeated
+ * headers with ", ", so a token like "googlebot: noindex" opens a scope for a specific crawler
+ * that lasts until the next prefixed token; those directives are ignored.
+ */
+function headerRobotsDirectives(value: string | undefined): string[] {
+  const directives: string[] = [];
+  let forAll = true;
+  for (const token of (value ?? '').split(',')) {
+    let directive = token.trim().toLowerCase();
+    const prefixed = /^([a-z0-9_-]+)\s*:\s*(.*)$/.exec(directive);
+    if (prefixed && prefixed[1] !== 'unavailable_after') {
+      forAll = prefixed[1] === 'all' || prefixed[1] === '*';
+      directive = prefixed[2] ?? '';
+    }
+    if (forAll && directive !== '') directives.push(directive);
+  }
+  return directives;
+}
+
+export function checkIndexable($: CheerioAPI, headers: Record<string, string> = {}): CheckResult {
+  const metaDirectives = ($('meta[name="robots" i]').attr('content') ?? '')
+    .split(',')
+    .map((d) => d.trim().toLowerCase());
+  const header = headerRobotsDirectives(headers['x-robots-tag']);
+  const has = (...names: string[]) =>
+    [...metaDirectives, ...header].some((directive) => names.includes(directive));
+  const remediation =
+    'Remove "noindex" from <meta name="robots"> and the X-Robots-Tag header so search engines can index the page.';
+  if (has('noindex', 'none')) {
+    return makeResult(
+      INDEXABLE,
+      'fail',
+      'Page tells search engines not to index it (noindex)',
+      remediation,
+    );
+  }
+  if (has('nofollow')) {
+    return makeResult(
+      INDEXABLE,
+      'warn',
+      'Page tells search engines not to follow its links (nofollow)',
+      'Remove "nofollow" from <meta name="robots"> unless you really want links on the page ignored.',
+    );
+  }
+  return makeResult(INDEXABLE, 'pass', 'Page can be indexed by search engines');
+}
+
 function looksLikeHtml(response: TextResponse): boolean {
   if (response.contentType?.toLowerCase().includes('text/html')) return true;
   return /^\s*<(!doctype|html)/i.test(response.body);
@@ -220,13 +269,16 @@ export interface SeoInput extends PageInput {
 }
 
 /** Checks that apply to every analysed page. */
-export function runSeoPageChecks(page: PageInput): CheckResult[] {
+export function runSeoPageChecks(
+  page: PageInput & { headers?: Record<string, string> },
+): CheckResult[] {
   return [
     safeRunPage(TITLE, page, checkTitle),
     safeRunPage(META_DESCRIPTION, page, checkMetaDescription),
     safeRunPage(H1, page, checkH1),
     safeRunPage(CANONICAL, page, checkCanonical),
     safeRunPage(VIEWPORT, page, checkViewport),
+    safeRunPage(INDEXABLE, page, ($) => checkIndexable($, page.headers)),
   ];
 }
 
