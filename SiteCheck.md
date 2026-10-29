@@ -340,7 +340,17 @@ Tillagt 2026-10-28, före release. Detaljer i [implementation.md](implementation
 - [ ] Ny kategori `accessibility` som ersätter `html` (`viewport-meta` flyttas till SEO)
 - [ ] Analysera fler sidor via sitemap (`--pages`)
 
-### Vecka 7 – Release
+### Vecka 7 – Fler kontroller
+
+Tillagt 2026-10-29, före release. Detaljer i [implementation.md](implementation.md) (M9, avsnitt 5e).
+
+- [ ] Security: TLS-certifikat, clickjacking, cookie-flaggor, mixed content
+- [ ] SEO: `noindex`-kontroll
+- [ ] Availability: soft 404
+- [ ] Accessibility: giltig `lang`-tagg
+- [ ] Fas B: SRI, Open Graph, strukturerad data, hreflang, redirect-kedjor, www-konsistens, tomma rubriker m.fl.
+
+### Vecka 8 – Release
 
 Ett mål, inte en deadline.
 
