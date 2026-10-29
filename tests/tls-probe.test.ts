@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { createServer as createTcpServer, type AddressInfo, type Server } from 'node:net';
-import { createServer as createTlsServer, type Server as TlsServer } from 'node:tls';
+import {
+  createServer as createTlsServer,
+  type Server as TlsServer,
+  type TlsOptions,
+} from 'node:tls';
 import { afterEach, describe, expect, it } from 'vitest';
 import { fetchPage, probeTls } from '../src/net/http.js';
 import { startTestServer, type TestServer } from './helpers/test-server.js';
@@ -44,9 +48,9 @@ describe('probeTls', () => {
   const fixture = (name: string) =>
     readFileSync(new URL(`./fixtures/tls/${name}`, import.meta.url));
 
-  async function listenTls(): Promise<number> {
+  async function listenTls(options: TlsOptions = {}): Promise<number> {
     tlsServer = createTlsServer(
-      { key: fixture('selfsigned.key'), cert: fixture('selfsigned.crt') },
+      { key: fixture('selfsigned.key'), cert: fixture('selfsigned.crt'), ...options },
       (socket) => socket.end(),
     );
     await new Promise<void>((resolve) => tlsServer!.listen(0, '127.0.0.1', resolve));
@@ -65,6 +69,16 @@ describe('probeTls', () => {
       protocol: 'TLSv1.3',
     });
     expect(Date.parse(probe.validTo!)).toBeGreaterThan(Date.now());
+  });
+
+  it('reports an outdated protocol instead of failing the handshake', async () => {
+    const port = await listenTls({
+      minVersion: 'TLSv1',
+      maxVersion: 'TLSv1',
+      ciphers: 'DEFAULT:@SECLEVEL=0',
+    });
+    const probe = await probeTls('127.0.0.1', port);
+    expect(probe).toMatchObject({ error: null, protocol: 'TLSv1' });
   });
 
   it('reports a refused connection as an error without throwing', async () => {

@@ -349,7 +349,8 @@ export function checkClickjacking(headers: Headers): CheckResult {
       ? []
       : parseCspPolicies(csp)
           .map((policy) => policy.get('frame-ancestors'))
-          .filter((sources): sources is string[] => sources !== undefined && sources.length > 0);
+          // An empty source list matches nothing, i.e. it acts like 'none'.
+          .filter((sources): sources is string[] => sources !== undefined);
   if (ancestors.some((sources) => !sources.includes('*'))) {
     return makeResult(CLICKJACKING, 'pass', 'Framing is restricted by CSP frame-ancestors');
   }
@@ -443,7 +444,19 @@ const PASSIVE_RESOURCES: [selector: string, attr: string][] = [
   ['audio[src]', 'src'],
   ['video[src]', 'src'],
   ['source[src]', 'src'],
+  ['img[srcset]', 'srcset'],
+  ['source[srcset]', 'srcset'],
+  ['video[poster]', 'poster'],
 ];
+
+/** The URLs in an attribute; `srcset` holds comma-separated "url [descriptor]" candidates. */
+function attrUrls(attr: string, value: string): string[] {
+  if (attr !== 'srcset') return [value];
+  return value
+    .split(',')
+    .map((candidate) => candidate.trim().split(/\s+/)[0] ?? '')
+    .filter((url) => url !== '');
+}
 
 /** Absolute http:// URLs of the resources matching `sources`, relative ones resolved against `base`. */
 function insecureUrls($: CheerioAPI, sources: [string, string][], base: URL): string[] {
@@ -452,11 +465,13 @@ function insecureUrls($: CheerioAPI, sources: [string, string][], base: URL): st
     $(selector).each((_, el) => {
       const raw = $(el).attr(attr)?.trim();
       if (!raw) return;
-      try {
-        const url = new URL(raw, base);
-        if (url.protocol === 'http:') found.push(url.href);
-      } catch {
-        // Unparseable URLs load nothing.
+      for (const value of attrUrls(attr, raw)) {
+        try {
+          const url = new URL(value, base);
+          if (url.protocol === 'http:') found.push(url.href);
+        } catch {
+          // Unparseable URLs load nothing.
+        }
       }
     });
   }
@@ -474,8 +489,16 @@ export function checkMixedContent($: CheerioAPI, headers: Headers, finalUrl: str
       'Skipped mixed-content: page is not served over HTTPS',
     );
   }
-  const csp = header(headers, 'content-security-policy');
-  if (csp !== undefined && parseCspPolicies(csp).some((p) => p.has('upgrade-insecure-requests'))) {
+  // Unlike frame-ancestors, upgrade-insecure-requests also works in a <meta> policy.
+  const policies = [
+    header(headers, 'content-security-policy'),
+    ...$('meta[http-equiv="content-security-policy" i]')
+      .map((_, el) => $(el).attr('content'))
+      .get(),
+  ].filter((value): value is string => value !== undefined && value.trim() !== '');
+  if (
+    policies.some((csp) => parseCspPolicies(csp).some((p) => p.has('upgrade-insecure-requests')))
+  ) {
     return makeResult(
       MIXED_CONTENT,
       'pass',

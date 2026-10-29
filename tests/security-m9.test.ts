@@ -103,9 +103,16 @@ describe('checkClickjacking', () => {
     );
   });
 
-  it('fails when nothing restricts framing, including an empty frame-ancestors', () => {
+  it('treats an empty frame-ancestors like none', () => {
+    expect(checkClickjacking({ 'content-security-policy': 'frame-ancestors' }).status).toBe('pass');
+    expect(
+      checkClickjacking({ 'content-security-policy': "default-src 'self'; frame-ancestors ;" })
+        .status,
+    ).toBe('pass');
+  });
+
+  it('fails when nothing restricts framing', () => {
     expect(checkClickjacking({}).status).toBe('fail');
-    expect(checkClickjacking({ 'content-security-policy': 'frame-ancestors' }).status).toBe('fail');
     expect(checkClickjacking({ 'content-security-policy': "default-src 'self'" }).status).toBe(
       'fail',
     );
@@ -199,6 +206,9 @@ describe('checkMixedContent', () => {
     '<img src="http://cdn.example/a.png">',
     '<audio src="http://cdn.example/a.mp3"></audio>',
     '<video><source src="http://cdn.example/a.mp4"></video>',
+    '<img src="/a.png" srcset="/a-2x.png 2x, http://cdn.example/a-3x.png 3x">',
+    '<picture><source srcset="http://cdn.example/a.webp"><img src="/a.png"></picture>',
+    '<video poster="http://cdn.example/p.jpg"></video>',
   ])('warns for passive content only: %s', (html) => {
     expect(check(html).status).toBe('warn');
   });
@@ -226,6 +236,17 @@ describe('checkMixedContent', () => {
       'content-security-policy': "default-src 'self'; upgrade-insecure-requests",
     });
     expect(r.status).toBe('pass');
+  });
+
+  it('passes when a <meta> CSP upgrades insecure requests', () => {
+    const r = check(
+      '<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests"><script src="http://cdn.example/x.js"></script>',
+    );
+    expect(r.status).toBe('pass');
+  });
+
+  it('passes https srcset candidates', () => {
+    expect(check('<img srcset="https://cdn.example/a.png 1x, /b.png 2x">').status).toBe('pass');
   });
 
   it('skips a plain http page', () => {

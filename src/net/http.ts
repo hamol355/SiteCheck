@@ -404,6 +404,9 @@ export function probeTls(
         ...(isIP(bare) === 0 && { servername: bare }),
         rejectUnauthorized: false,
         minVersion: 'TLSv1',
+        // OpenSSL's default security level refuses TLS 1.0/1.1 even with minVersion, which would
+        // turn an outdated server into a handshake error instead of a protocol we can report.
+        ciphers: 'DEFAULT:@SECLEVEL=0',
       });
     } catch (err) {
       return finish(failed(describeCause(err)));
