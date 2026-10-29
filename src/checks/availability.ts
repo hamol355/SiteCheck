@@ -1,3 +1,4 @@
+import { quoteUntrusted } from '../text.js';
 import { makeResult, safeRun } from './run.js';
 import type {
   CheckDefinition,
@@ -162,6 +163,8 @@ export function checkWwwConsistency(probe: StatusProbe | null, finalUrl: string)
   }
   const { status, location } = probe;
   const host = new URL(probe.url).hostname;
+  const finalHost = new URL(finalUrl).hostname;
+  const remediation = 'Pick one of www and non-www and 301-redirect the other to it.';
   if (status !== null && status >= 300 && status < 400 && location) {
     let target: URL | null = null;
     try {
@@ -169,16 +172,32 @@ export function checkWwwConsistency(probe: StatusProbe | null, finalUrl: string)
     } catch {
       // Treated as a redirect that does not lead to the site below.
     }
-    if (target && target.hostname !== host) {
-      return makeResult(WWW_CONSISTENCY, 'pass', `${host} redirects to ${target.hostname}`);
+    if (target?.hostname === finalHost) {
+      return makeResult(WWW_CONSISTENCY, 'pass', `${host} redirects to ${finalHost}`);
+    }
+    if (target?.hostname === host) {
+      // The probe does not follow redirects, so where this one ends is unknown.
+      return makeResult(
+        WWW_CONSISTENCY,
+        'skip',
+        `Skipped www-consistency: ${host} redirects within its own host`,
+      );
+    }
+    if (target) {
+      return makeResult(
+        WWW_CONSISTENCY,
+        'warn',
+        `${host} redirects to ${quoteUntrusted(target.hostname)}, not to ${finalHost}`,
+        remediation,
+      );
     }
   }
   if (status !== null && status >= 200 && status < 300) {
     return makeResult(
       WWW_CONSISTENCY,
       'warn',
-      `${host} also serves the site without redirecting to ${new URL(finalUrl).hostname} (duplicate content)`,
-      'Pick one of www and non-www and 301-redirect the other to it.',
+      `${host} also serves the site without redirecting to ${finalHost} (duplicate content)`,
+      remediation,
     );
   }
   return makeResult(WWW_CONSISTENCY, 'pass', `${host} does not serve a second copy of the site`);

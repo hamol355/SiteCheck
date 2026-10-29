@@ -238,6 +238,14 @@ describe('www-consistency', () => {
   it('passes when the other variant redirects to the site', () => {
     expect(checkWwwConsistency(probe(301, 'https://example.com/'), final).status).toBe('pass');
   });
+  it('warns when the other variant redirects to a host other than the site', () => {
+    const r = checkWwwConsistency(probe(301, 'https://elsewhere.test/'), final);
+    expect(r.status).toBe('warn');
+    expect(r.message).toContain('elsewhere.test');
+  });
+  it('skips when the other variant redirects within its own host', () => {
+    expect(checkWwwConsistency(probe(301, '/en/'), final).status).toBe('skip');
+  });
   it('passes when the other variant does not respond or errors', () => {
     expect(checkWwwConsistency(probe(null), final).status).toBe('pass');
     expect(checkWwwConsistency(probe(404), final).status).toBe('pass');

@@ -45,7 +45,12 @@ export function analyzePage(
 ): CheckResult[] {
   const input = { $: parse(page.html), status: page.status };
   return [
-    ...runSeoPageChecks({ ...input, headers: page.headers, finalUrl: page.finalUrl }),
+    ...runSeoPageChecks({
+      ...input,
+      headers: page.headers,
+      finalUrl: page.finalUrl,
+      html: page.html,
+    }),
     ...runAccessibilityChecks(input),
     ...runSecurityPageChecks({ ...input, headers: page.headers, finalUrl: page.finalUrl }),
   ];

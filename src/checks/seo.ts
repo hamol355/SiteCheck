@@ -1,5 +1,6 @@
 import type { CheerioAPI } from 'cheerio';
 import { quoteUntrusted } from '../text.js';
+import { isLanguageTag } from './language-tag.js';
 import { makeResult, safeRun, safeRunPage, type PageInput } from './run.js';
 import type { CheckDefinition, CheckResult, TextResponse } from './types.js';
 
@@ -275,11 +276,14 @@ export function checkStructuredData($: CheerioAPI): CheckResult {
     try {
       const data: unknown = JSON.parse($(block).text());
       const items = Array.isArray(data) ? data : [data];
+      const isObject = (v: unknown): v is Record<string, unknown> =>
+        typeof v === 'object' && v !== null && !Array.isArray(v);
       const valid = items.every((item) => {
-        if (typeof item !== 'object' || item === null) return false;
-        const node = item as Record<string, unknown>;
+        if (!isObject(item) || !('@context' in item)) return false;
         // A @graph document carries @context once at the top and @type on its nodes.
-        return '@type' in node || Array.isArray(node['@graph']);
+        const graph = item['@graph'];
+        if (Array.isArray(graph)) return graph.every((node) => isObject(node) && '@type' in node);
+        return '@type' in item;
       });
       if (!valid) invalid++;
     } catch {
@@ -296,12 +300,10 @@ export function checkStructuredData($: CheerioAPI): CheckResult {
   return makeResult(
     STRUCTURED_DATA,
     'fail',
-    `${invalid} of ${blocks.length} JSON-LD blocks are invalid (not JSON or missing @type)`,
+    `${invalid} of ${blocks.length} JSON-LD blocks are invalid (not JSON or missing @context/@type)`,
     'Fix the JSON syntax and give each JSON-LD object an @context and @type; validate at validator.schema.org.',
   );
 }
-
-const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i;
 
 export function checkHreflang($: CheerioAPI): CheckResult {
   const bad: string[] = [];
@@ -315,7 +317,7 @@ export function checkHreflang($: CheerioAPI): CheckResult {
     } catch {
       // Relative or empty.
     }
-    if (!absolute || (lang.toLowerCase() !== 'x-default' && !LANGUAGE_TAG.test(lang))) {
+    if (!absolute || (lang.toLowerCase() !== 'x-default' && !isLanguageTag(lang))) {
       bad.push(lang);
     }
   });
@@ -328,20 +330,42 @@ export function checkHreflang($: CheerioAPI): CheckResult {
   );
 }
 
-export function checkCharset($: CheerioAPI, headers: Record<string, string> = {}): CheckResult {
-  const fromHeader = /charset\s*=/i.test(headers['content-type'] ?? '');
+/** Browsers only look for a `<meta>` charset in this many bytes before parsing. */
+export const CHARSET_PRESCAN_BYTES = 1024;
+
+/**
+ * `html` is the raw page; when given, a `<meta>` declaration only counts within the first
+ * `CHARSET_PRESCAN_BYTES` (measured on the decoded text re-encoded as UTF-8).
+ */
+export function checkCharset(
+  $: CheerioAPI,
+  headers: Record<string, string> = {},
+  html?: string | null,
+): CheckResult {
+  const remediation = `Add <meta charset="utf-8"> early in the <head> (within the first ${CHARSET_PRESCAN_BYTES} bytes).`;
+  if (/charset\s*=/i.test(headers['content-type'] ?? '')) {
+    return makeResult(CHARSET, 'pass', 'Character encoding is declared');
+  }
   const fromMeta =
     $('meta[charset]').length > 0 ||
     $('meta[http-equiv="content-type" i]').filter((_, el) =>
       /charset/i.test($(el).attr('content') ?? ''),
     ).length > 0;
-  if (fromHeader || fromMeta) return makeResult(CHARSET, 'pass', 'Character encoding is declared');
-  return makeResult(
-    CHARSET,
-    'fail',
-    'No character encoding declared',
-    'Add <meta charset="utf-8"> early in the <head> (within the first 1024 bytes).',
-  );
+  if (!fromMeta) {
+    return makeResult(CHARSET, 'fail', 'No character encoding declared', remediation);
+  }
+  if (typeof html === 'string') {
+    const prescan = Buffer.from(html, 'utf8').subarray(0, CHARSET_PRESCAN_BYTES).toString('utf8');
+    if (!/<meta\b[^>]*\bcharset\s*=/i.test(prescan)) {
+      return makeResult(
+        CHARSET,
+        'fail',
+        `Character encoding is declared after the first ${CHARSET_PRESCAN_BYTES} bytes`,
+        remediation,
+      );
+    }
+  }
+  return makeResult(CHARSET, 'pass', 'Character encoding is declared');
 }
 
 export function checkDoctype($: CheerioAPI): CheckResult {
@@ -445,7 +469,7 @@ export interface SeoInput extends PageInput {
 
 /** Checks that apply to every analysed page. */
 export function runSeoPageChecks(
-  page: PageInput & { headers?: Record<string, string>; finalUrl?: string },
+  page: PageInput & { headers?: Record<string, string>; finalUrl?: string; html?: string | null },
 ): CheckResult[] {
   return [
     safeRunPage(TITLE, page, checkTitle),
@@ -457,7 +481,7 @@ export function runSeoPageChecks(
     safeRunPage(OPEN_GRAPH, page, checkOpenGraph),
     safeRunPage(STRUCTURED_DATA, page, checkStructuredData),
     safeRunPage(HREFLANG, page, checkHreflang),
-    safeRunPage(CHARSET, page, ($) => checkCharset($, page.headers)),
+    safeRunPage(CHARSET, page, ($) => checkCharset($, page.headers, page.html)),
     safeRunPage(DOCTYPE, page, checkDoctype),
   ];
 }

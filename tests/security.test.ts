@@ -417,6 +417,10 @@ describe('info-disclosure', () => {
     [{ server: 'nginx/1.18.0' }, 'warn'],
     [{ server: 'Apache/2.4.41 (Ubuntu)' }, 'warn'],
     [{ 'x-powered-by': 'Express' }, 'warn'],
+    [{ server: 'Apache/2' }, 'warn'],
+    [{ server: 'Jetty(9.4.z-SNAPSHOT)' }, 'warn'],
+    [{ server: 'ECS (dcb/7F84)' }, 'pass'],
+    [{ server: 'tsa_k' }, 'pass'],
   ])('%j -> %s', (headers, status) => {
     expect(checkInfoDisclosure(headers).status).toBe(status);
   });

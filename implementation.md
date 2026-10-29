@@ -1,6 +1,6 @@
 # Implementationsplan – SiteCheck v1.0.0
 
-> Status 2026-10-29: M1–M8 klara. M9 (fler kontroller, se 5e) läggs till före release. Release (M10) är ett mål, inte en deadline.
+> Status 2026-10-29: M1–M9 klara (M9: fler kontroller, se 5e). Nästa steg är release (M10), ett mål, inte en deadline.
 
 Det här dokumentet bryter ner roadmapen i [SiteCheck.md](SiteCheck.md) till konkreta steg. Regler och konventioner finns i [CLAUDE.md](CLAUDE.md); vid konflikt gäller CLAUDE.md.
 

@@ -618,10 +618,13 @@ export function checkFormActionHttps($: CheerioAPI, finalUrl: string): CheckResu
   );
 }
 
+/** `nginx/1.18.0`, `Apache/2`, `Jetty(9.4.z)`; not CDN node ids like `ECS (dcb/7F84)`. */
+const VERSION_NUMBER = /\/v?\d+(?:\.\d+)*(?!\w)|\b\d+\.\d+/i;
+
 export function checkInfoDisclosure(headers: Headers): CheckResult {
   const leaks: string[] = [];
   const server = header(headers, 'server');
-  if (server && /\d/.test(server)) leaks.push(`Server: ${server}`);
+  if (server && VERSION_NUMBER.test(server)) leaks.push(`Server: ${server}`);
   const poweredBy = header(headers, 'x-powered-by');
   if (poweredBy) leaks.push(`X-Powered-By: ${poweredBy}`);
   if (leaks.length === 0) {

@@ -361,7 +361,13 @@ describe('structured-data', () => {
   it('passes without blocks and with valid ones', () => {
     expect(run('').status).toBe('pass');
     expect(run(ld('{"@context":"https://schema.org","@type":"Organization"}')).status).toBe('pass');
-    expect(run(ld('[{"@type":"A"},{"@type":"B"}]')).status).toBe('pass');
+    expect(
+      run(
+        ld(
+          '[{"@context":"https://schema.org","@type":"A"},{"@context":"https://schema.org","@type":"B"}]',
+        ),
+      ).status,
+    ).toBe('pass');
     expect(run(ld('{"@context":"https://schema.org","@graph":[{"@type":"A"}]}')).status).toBe(
       'pass',
     );
@@ -370,6 +376,13 @@ describe('structured-data', () => {
     expect(run(ld('{not json')).status).toBe('fail');
     expect(run(ld('{"@context":"https://schema.org"}')).status).toBe('fail');
     expect(run(ld('"text"')).status).toBe('fail');
+  });
+  it('fails on a missing @context or @graph nodes without @type', () => {
+    expect(run(ld('{"@type":"Thing"}')).status).toBe('fail');
+    expect(run(ld('{"@context":"https://schema.org","@graph":[1,2]}')).status).toBe('fail');
+    expect(run(ld('{"@context":"https://schema.org","@graph":[{"name":"x"}]}')).status).toBe(
+      'fail',
+    );
   });
 });
 
@@ -381,11 +394,14 @@ describe('hreflang', () => {
   it('passes with none or valid annotations', () => {
     expect(run('').status).toBe('pass');
     expect(run(alt('en') + alt('sv-SE') + alt('x-default')).status).toBe('pass');
+    expect(run(alt('zh-Hant-TW') + alt('es-419')).status).toBe('pass');
   });
   it('fails on an invalid tag or a relative href', () => {
     expect(run(alt('english')).status).toBe('fail');
     expect(run(alt('en_US')).status).toBe('fail');
     expect(run(alt('en', '/en/')).status).toBe('fail');
+    expect(run(alt('en-US-US')).status).toBe('fail');
+    expect(run(alt('e')).status).toBe('fail');
   });
 });
 
@@ -398,6 +414,17 @@ describe('charset', () => {
     ).toBe('pass');
     expect(
       checkCharset(load('<p>x</p>'), { 'content-type': 'text/html; charset=UTF-8' }).status,
+    ).toBe('pass');
+  });
+  it('fails when the meta declaration is past the first 1024 bytes', () => {
+    const late = `<!DOCTYPE html><head><!-- ${'x'.repeat(1100)} --><meta charset="utf-8"></head>`;
+    const r = checkCharset(load(late), {}, late);
+    expect(r.status).toBe('fail');
+    expect(r.message).toContain('1024');
+    const early = '<!DOCTYPE html><head><meta charset="utf-8"></head>';
+    expect(checkCharset(load(early), {}, early).status).toBe('pass');
+    expect(
+      checkCharset(load(late), { 'content-type': 'text/html; charset=utf-8' }, late).status,
     ).toBe('pass');
   });
   it('fails when no encoding is declared', () => {

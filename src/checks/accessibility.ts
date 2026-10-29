@@ -1,5 +1,6 @@
 import type { CheerioAPI } from 'cheerio';
 import { quoteUntrusted } from '../text.js';
+import { isLanguageTag } from './language-tag.js';
 import { makeResult, safeRunPage, type PageInput } from './run.js';
 import type { CheckDefinition, CheckResult } from './types.js';
 
@@ -166,15 +167,11 @@ function hasContentName($: CheerioAPI, el: Selection): boolean {
   return normalizeText(contentText($, el)) !== '' || hasAttributeName($, el);
 }
 
-/** Syntax of a BCP 47 language tag; there is no registry lookup, so unknown codes pass. */
-const BCP47 =
-  /^(?:[a-z]{2,3}(?:-[a-z]{3}){0,3})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|\d{3}))?(?:-(?:[a-z0-9]{5,8}|\d[a-z0-9]{3}))*(?:-[a-wyz0-9](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?$|^x(?:-[a-z0-9]{1,8})+$/i;
-
 export function checkHtmlLangValid($: CheerioAPI): CheckResult {
   const lang = ($('html').first().attr('lang') ?? '').trim();
   // A missing lang is html-lang's finding; do not penalise it twice.
   if (lang === '') return makeResult(LANG_VALID, 'skip', 'No lang attribute to validate');
-  if (BCP47.test(lang)) {
+  if (isLanguageTag(lang)) {
     return makeResult(LANG_VALID, 'pass', `Language tag "${quoteUntrusted(lang)}" is well-formed`);
   }
   return makeResult(
