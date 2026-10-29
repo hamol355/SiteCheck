@@ -3,7 +3,15 @@ import * as cheerio from 'cheerio';
 import { describe, expect, it } from 'vitest';
 import {
   checkCanonical,
+  checkCharset,
+  checkDoctype,
+  checkDuplicateDescriptions,
+  checkDuplicateTitles,
   checkH1,
+  checkHreflang,
+  checkOpenGraph,
+  runSeoCrossPageChecks,
+  checkStructuredData,
   checkIndexable,
   checkMetaDescription,
   checkRobotsTxt,
@@ -261,11 +269,16 @@ describe('runSeoChecks', () => {
       'canonical-url',
       'viewport-meta',
       'indexable',
+      'open-graph',
+      'structured-data',
+      'hreflang',
+      'charset',
+      'doctype',
       'robots-txt',
       'sitemap-xml',
     ]);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(30);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(38);
   });
 
   it('reports a bad page', () => {
@@ -309,6 +322,11 @@ describe('runSeoChecks', () => {
       'canonical-url': 'skip',
       'viewport-meta': 'skip',
       indexable: 'skip',
+      'open-graph': 'skip',
+      'structured-data': 'skip',
+      hreflang: 'skip',
+      charset: 'skip',
+      doctype: 'skip',
       'robots-txt': 'pass',
       'sitemap-xml': 'pass',
     });
@@ -319,5 +337,124 @@ describe('runSeoChecks', () => {
       const results = runSeoChecks({ $: load(html), status: 200, robots: text(), sitemap: ok });
       expect(results.some((r) => r.status === 'error')).toBe(false);
     }
+  });
+});
+
+describe('open-graph', () => {
+  const run = (head: string) => checkOpenGraph(load(`<html><head>${head}</head></html>`));
+  const tag = (p: string) => `<meta property="og:${p}" content="x">`;
+
+  it('passes with title, description and image', () => {
+    expect(run(tag('title') + tag('description') + tag('image')).status).toBe('pass');
+  });
+  it('warns when some are missing and fails when none exist', () => {
+    expect(run(tag('title')).status).toBe('warn');
+    expect(run('<meta property="og:title" content=" ">').status).toBe('fail');
+    expect(run('').status).toBe('fail');
+  });
+});
+
+describe('structured-data', () => {
+  const run = (body: string) => checkStructuredData(load(`<html><body>${body}</body></html>`));
+  const ld = (json: string) => `<script type="application/ld+json">${json}</script>`;
+
+  it('passes without blocks and with valid ones', () => {
+    expect(run('').status).toBe('pass');
+    expect(run(ld('{"@context":"https://schema.org","@type":"Organization"}')).status).toBe('pass');
+    expect(run(ld('[{"@type":"A"},{"@type":"B"}]')).status).toBe('pass');
+    expect(run(ld('{"@context":"https://schema.org","@graph":[{"@type":"A"}]}')).status).toBe(
+      'pass',
+    );
+  });
+  it('fails on broken JSON or a missing @type', () => {
+    expect(run(ld('{not json')).status).toBe('fail');
+    expect(run(ld('{"@context":"https://schema.org"}')).status).toBe('fail');
+    expect(run(ld('"text"')).status).toBe('fail');
+  });
+});
+
+describe('hreflang', () => {
+  const run = (links: string) => checkHreflang(load(`<html><head>${links}</head></html>`));
+  const alt = (lang: string, href = 'https://example.com/') =>
+    `<link rel="alternate" hreflang="${lang}" href="${href}">`;
+
+  it('passes with none or valid annotations', () => {
+    expect(run('').status).toBe('pass');
+    expect(run(alt('en') + alt('sv-SE') + alt('x-default')).status).toBe('pass');
+  });
+  it('fails on an invalid tag or a relative href', () => {
+    expect(run(alt('english')).status).toBe('fail');
+    expect(run(alt('en_US')).status).toBe('fail');
+    expect(run(alt('en', '/en/')).status).toBe('fail');
+  });
+});
+
+describe('charset', () => {
+  it('passes with meta charset, http-equiv or a Content-Type header', () => {
+    expect(checkCharset(load('<meta charset="utf-8">')).status).toBe('pass');
+    expect(
+      checkCharset(load('<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'))
+        .status,
+    ).toBe('pass');
+    expect(
+      checkCharset(load('<p>x</p>'), { 'content-type': 'text/html; charset=UTF-8' }).status,
+    ).toBe('pass');
+  });
+  it('fails when no encoding is declared', () => {
+    expect(checkCharset(load('<p>x</p>'), { 'content-type': 'text/html' }).status).toBe('fail');
+  });
+});
+
+describe('doctype', () => {
+  it.each([
+    ['<!DOCTYPE html><html></html>', 'pass'],
+    ['<!doctype HTML><html></html>', 'pass'],
+    ['<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"><html></html>', 'warn'],
+    ['<html></html>', 'fail'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkDoctype(load(html)).status).toBe(status);
+  });
+});
+
+describe('duplicate-titles and duplicate-descriptions', () => {
+  it('skip with a single page or fewer than two values', () => {
+    expect(checkDuplicateTitles(['A']).status).toBe('skip');
+    expect(checkDuplicateTitles(['A', '']).status).toBe('skip');
+  });
+  it('pass when all are unique, ignoring pages without one', () => {
+    expect(checkDuplicateTitles(['A', 'B', '']).status).toBe('pass');
+  });
+  it('warns up to 20 % of pages sharing, fails above', () => {
+    const unique = ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+    expect(checkDuplicateTitles(['a', 'a', ...unique]).status).toBe('warn');
+    expect(checkDuplicateTitles(['a', 'a', 'a', ...unique]).status).toBe('fail');
+    expect(checkDuplicateTitles(['a', 'a', 'a', ...unique]).remediation).toBeDefined();
+  });
+  it('works for descriptions', () => {
+    expect(checkDuplicateDescriptions(['x', 'x']).status).toBe('fail');
+    expect(checkDuplicateDescriptions(['x', 'y']).id).toBe('duplicate-descriptions');
+  });
+});
+
+describe('canonical-url across origins', () => {
+  const run = (href: string) =>
+    checkCanonical(load(`<link rel="canonical" href="${href}">`), 'https://example.com/page');
+
+  it('passes for the same origin and warns for another', () => {
+    expect(run('https://example.com/page').status).toBe('pass');
+    expect(run('https://other.example.net/page').status).toBe('warn');
+  });
+});
+
+describe('runSeoCrossPageChecks', () => {
+  it('compares titles and descriptions of the analysed pages', () => {
+    const results = runSeoCrossPageChecks([
+      { title: 'Same', description: 'a' },
+      { title: 'Same', description: 'b' },
+    ]);
+    expect(results.map((r) => [r.id, r.status])).toEqual([
+      ['duplicate-titles', 'fail'],
+      ['duplicate-descriptions', 'pass'],
+    ]);
   });
 });

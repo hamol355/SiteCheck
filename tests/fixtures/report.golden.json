@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "url": "http://TEST/",
   "finalUrl": "http://TEST/",
-  "score": 71,
+  "score": 73,
   "grade": "Needs improvement",
   "categories": {
     "availability": {
-      "score": 11,
+      "score": 12,
       "max": 15
     },
     "security": {
-      "score": 10,
+      "score": 12,
       "max": 35
     },
     "seo": {
-      "score": 20,
+      "score": 19,
       "max": 20
     },
     "accessibility": {
@@ -55,6 +55,22 @@
       "message": "Missing pages respond with HTTP 404",
       "points": 4,
       "maxPoints": 4
+    },
+    {
+      "id": "redirect-chain",
+      "category": "availability",
+      "status": "pass",
+      "message": "No redirects to the final URL",
+      "points": 2,
+      "maxPoints": 2
+    },
+    {
+      "id": "www-consistency",
+      "category": "availability",
+      "status": "skip",
+      "message": "Skipped www-consistency: no www variant to compare",
+      "points": 0,
+      "maxPoints": 3
     },
     {
       "id": "https",
@@ -134,12 +150,54 @@
       "maxPoints": 4
     },
     {
+      "id": "info-disclosure",
+      "category": "security",
+      "status": "pass",
+      "message": "No software versions are exposed in headers",
+      "points": 2,
+      "maxPoints": 2
+    },
+    {
+      "id": "cross-origin-isolation",
+      "category": "security",
+      "status": "warn",
+      "message": "Cross-Origin-Opener-Policy header is missing",
+      "points": 1,
+      "maxPoints": 2,
+      "remediation": "Add \"Cross-Origin-Opener-Policy: same-origin\" to isolate the page from windows opened by other sites."
+    },
+    {
+      "id": "security-txt",
+      "category": "security",
+      "status": "fail",
+      "message": "No security.txt found",
+      "points": 0,
+      "maxPoints": 1,
+      "remediation": "Publish /.well-known/security.txt with Contact: and Expires: fields (see securitytxt.org) so researchers know how to report vulnerabilities."
+    },
+    {
       "id": "mixed-content",
       "category": "security",
       "status": "skip",
       "message": "Skipped mixed-content: page is not served over HTTPS",
       "points": 0,
       "maxPoints": 5
+    },
+    {
+      "id": "subresource-integrity",
+      "category": "security",
+      "status": "pass",
+      "message": "No cross-origin scripts or stylesheets",
+      "points": 3,
+      "maxPoints": 3
+    },
+    {
+      "id": "form-action-https",
+      "category": "security",
+      "status": "skip",
+      "message": "Skipped form-action-https: page is not served over HTTPS",
+      "points": 0,
+      "maxPoints": 3
     },
     {
       "id": "title",
@@ -168,10 +226,11 @@
     {
       "id": "canonical-url",
       "category": "seo",
-      "status": "pass",
-      "message": "Canonical URL is https://example.com/",
-      "points": 3,
-      "maxPoints": 3
+      "status": "warn",
+      "message": "Canonical URL points to another origin (https://example.com/)",
+      "points": 1,
+      "maxPoints": 3,
+      "remediation": "Point the canonical link at a URL on this site, unless the content really is published elsewhere first."
     },
     {
       "id": "viewport-meta",
@@ -188,6 +247,62 @@
       "message": "Page can be indexed by search engines",
       "points": 5,
       "maxPoints": 5
+    },
+    {
+      "id": "open-graph",
+      "category": "seo",
+      "status": "pass",
+      "message": "Open Graph tags are set",
+      "points": 2,
+      "maxPoints": 2
+    },
+    {
+      "id": "structured-data",
+      "category": "seo",
+      "status": "pass",
+      "message": "No structured data",
+      "points": 2,
+      "maxPoints": 2
+    },
+    {
+      "id": "hreflang",
+      "category": "seo",
+      "status": "pass",
+      "message": "hreflang annotations are valid",
+      "points": 2,
+      "maxPoints": 2
+    },
+    {
+      "id": "charset",
+      "category": "seo",
+      "status": "pass",
+      "message": "Character encoding is declared",
+      "points": 1,
+      "maxPoints": 1
+    },
+    {
+      "id": "doctype",
+      "category": "seo",
+      "status": "pass",
+      "message": "Document has the HTML5 doctype",
+      "points": 1,
+      "maxPoints": 1
+    },
+    {
+      "id": "duplicate-titles",
+      "category": "seo",
+      "status": "skip",
+      "message": "Skipped duplicate-titles: needs --pages 2 or more",
+      "points": 0,
+      "maxPoints": 2
+    },
+    {
+      "id": "duplicate-descriptions",
+      "category": "seo",
+      "status": "skip",
+      "message": "Skipped duplicate-descriptions: needs --pages 2 or more",
+      "points": 0,
+      "maxPoints": 1
     },
     {
       "id": "robots-txt",
@@ -242,10 +357,46 @@
       "wcag": ["1.3.1"]
     },
     {
+      "id": "empty-heading",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "All headings have content",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["1.3.1", "2.4.6"]
+    },
+    {
+      "id": "skip-link",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "First focusable element skips to #main",
+      "points": 1,
+      "maxPoints": 1,
+      "wcag": ["2.4.1"]
+    },
+    {
+      "id": "list-structure",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "Lists are structured correctly",
+      "points": 1,
+      "maxPoints": 1,
+      "wcag": ["1.3.1"]
+    },
+    {
+      "id": "duplicate-id",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "No duplicate ids among referenced elements",
+      "points": 2,
+      "maxPoints": 2,
+      "wcag": ["4.1.2"]
+    },
+    {
       "id": "link-name",
       "category": "accessibility",
       "status": "pass",
-      "message": "All 1 links have an accessible name",
+      "message": "All 2 links have an accessible name",
       "points": 4,
       "maxPoints": 4,
       "wcag": ["2.4.4", "4.1.2"]

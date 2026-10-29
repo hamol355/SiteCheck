@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   checkHttpStatus,
   checkHttpsRedirect,
+  checkRedirectChain,
   checkResponseTime,
+  checkWwwConsistency,
+  wwwCounterpart,
   checkSoft404,
   runAvailabilityChecks,
 } from '../src/checks/availability.js';
@@ -66,7 +69,11 @@ describe('response-time', () => {
 });
 
 describe('soft-404', () => {
-  const probe = (status: number | null) => ({ url: 'https://example.com/x', status });
+  const probe = (status: number | null) => ({
+    url: 'https://example.com/x',
+    status,
+    location: null,
+  });
 
   it.each([404, 410])('passes on %i', (status) => {
     expect(checkSoft404(probe(status)).status).toBe('pass');
@@ -101,6 +108,8 @@ describe('runAvailabilityChecks', () => {
       'response-time',
       'https-redirect',
       'soft-404',
+      'redirect-chain',
+      'www-consistency',
     ]);
     expect(results.every((r) => r.category === 'availability')).toBe(true);
   });
@@ -178,5 +187,67 @@ describe('https-redirect', () => {
 
   it('warns for other unexpected statuses', () => {
     expect(checkHttpsRedirect(probe(404, null)).status).toBe('warn');
+  });
+});
+
+describe('redirect-chain', () => {
+  const chain = (n: number) =>
+    checkRedirectChain({
+      redirects: Array.from({ length: n }, (_, i) => ({
+        from: `https://example.com/${i}`,
+        to: `https://example.com/${i + 1}`,
+        status: 301,
+      })),
+    });
+
+  it.each([
+    [0, 'pass'],
+    [1, 'pass'],
+    [2, 'warn'],
+    [3, 'warn'],
+    [4, 'fail'],
+    [5, 'fail'],
+  ])('%i redirects -> %s', (n, status) => {
+    expect(chain(n).status).toBe(status);
+  });
+});
+
+describe('wwwCounterpart', () => {
+  it.each([
+    ['https://example.com/a?b=1', 'https://www.example.com/'],
+    ['https://www.example.com/', 'https://example.com/'],
+    ['https://example.com:8443/', 'https://www.example.com:8443/'],
+    ['https://blog.example.com/', null],
+    ['https://example.co.uk/', null],
+    ['https://127.0.0.1/', null],
+    ['http://localhost/', null],
+    ['https://[::1]/', null],
+  ])('%s -> %s', (url, expected) => {
+    expect(wwwCounterpart(url)).toBe(expected);
+  });
+});
+
+describe('www-consistency', () => {
+  const final = 'https://example.com/';
+  const probe = (status: number | null, location: string | null = null) => ({
+    url: 'https://www.example.com/',
+    status,
+    location,
+  });
+
+  it('passes when the other variant redirects to the site', () => {
+    expect(checkWwwConsistency(probe(301, 'https://example.com/'), final).status).toBe('pass');
+  });
+  it('passes when the other variant does not respond or errors', () => {
+    expect(checkWwwConsistency(probe(null), final).status).toBe('pass');
+    expect(checkWwwConsistency(probe(404), final).status).toBe('pass');
+  });
+  it('warns when the other variant serves the site itself', () => {
+    const r = checkWwwConsistency(probe(200), final);
+    expect(r.status).toBe('warn');
+    expect(r.remediation).toBeDefined();
+  });
+  it('skips when there is no variant to compare', () => {
+    expect(checkWwwConsistency(null, final).status).toBe('skip');
   });
 });

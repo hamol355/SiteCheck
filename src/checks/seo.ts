@@ -21,6 +21,13 @@ const VIEWPORT = def('viewport-meta', 5);
 const ROBOTS = def('robots-txt', 3);
 const SITEMAP = def('sitemap-xml', 3);
 const INDEXABLE = def('indexable', 5);
+const OPEN_GRAPH = def('open-graph', 2);
+const STRUCTURED_DATA = def('structured-data', 2);
+const HREFLANG = def('hreflang', 2);
+const CHARSET = def('charset', 1);
+const DOCTYPE = def('doctype', 1);
+const DUPLICATE_TITLES = def('duplicate-titles', 2);
+const DUPLICATE_DESCRIPTIONS = def('duplicate-descriptions', 1);
 
 /** Collapses whitespace runs like browsers do for document.title, so line breaks and indentation are not counted. */
 function normalizeText(text: string): string {
@@ -51,6 +58,59 @@ function lengthResult(
       ? `Keep the ${label} to ${max} characters or fewer.`
       : `Keep the ${label} between ${min} and ${max} characters.`,
   );
+}
+
+/** The page's title, as `checkTitle` reads it; empty if there is none. */
+export function pageTitle($: CheerioAPI): string {
+  // <title> inside inline SVG labels the icon, not the page.
+  const element = $('title')
+    .filter((_, el) => $(el).closest('svg').length === 0)
+    .first();
+  return normalizeText(element.text());
+}
+
+export function pageDescription($: CheerioAPI): string {
+  return normalizeText($('meta[name="description" i]').first().attr('content') ?? '');
+}
+
+/**
+ * Site-wide: do analysed pages share a title or description? `values` has one entry per analysed
+ * page, empty where the page has none (those pages are left out; `title`/`meta-description` cover them).
+ */
+function duplicateResult(checkDef: CheckDefinition, label: string, values: string[]): CheckResult {
+  const present = values.filter((v) => v !== '');
+  if (values.length < 2) {
+    return makeResult(checkDef, 'skip', `Skipped ${checkDef.id}: needs --pages 2 or more`);
+  }
+  if (present.length < 2) {
+    return makeResult(
+      checkDef,
+      'skip',
+      `Skipped ${checkDef.id}: fewer than two pages have a ${label}`,
+    );
+  }
+  const counts = new Map<string, number>();
+  for (const v of present) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const duplicated = [...counts.entries()].filter(([, n]) => n > 1);
+  if (duplicated.length === 0) {
+    return makeResult(checkDef, 'pass', `All ${present.length} pages have a unique ${label}`);
+  }
+  const sharing = duplicated.reduce((sum, [, n]) => sum + n, 0);
+  const status = sharing / present.length > 0.2 ? 'fail' : 'warn';
+  return makeResult(
+    checkDef,
+    status,
+    `${sharing} of ${present.length} pages share a ${label}, e.g. ${quoteUntrusted(duplicated[0]![0])}`,
+    `Give every page its own ${label} that describes that page.`,
+  );
+}
+
+export function checkDuplicateTitles(titles: string[]): CheckResult {
+  return duplicateResult(DUPLICATE_TITLES, 'title', titles);
+}
+
+export function checkDuplicateDescriptions(descriptions: string[]): CheckResult {
+  return duplicateResult(DUPLICATE_DESCRIPTIONS, 'meta description', descriptions);
 }
 
 export function checkTitle($: CheerioAPI): CheckResult {
@@ -95,7 +155,7 @@ export function checkH1($: CheerioAPI): CheckResult {
   );
 }
 
-export function checkCanonical($: CheerioAPI): CheckResult {
+export function checkCanonical($: CheerioAPI, finalUrl?: string): CheckResult {
   const href = ($('link[rel~="canonical" i]').first().attr('href') ?? '').trim();
   const remediation = 'Add <link rel="canonical" href="https://example.com/page"> to the <head>.';
   if (href === '') return makeResult(CANONICAL, 'fail', 'Missing canonical URL', remediation);
@@ -112,6 +172,14 @@ export function checkCanonical($: CheerioAPI): CheckResult {
       'warn',
       `Canonical URL is not absolute (${quoteUntrusted(href)})`,
       'Use an absolute URL including scheme and host in the canonical link.',
+    );
+  }
+  if (finalUrl !== undefined && new URL(href).origin !== new URL(finalUrl).origin) {
+    return makeResult(
+      CANONICAL,
+      'warn',
+      `Canonical URL points to another origin (${quoteUntrusted(href)})`,
+      'Point the canonical link at a URL on this site, unless the content really is published elsewhere first.',
     );
   }
   return makeResult(CANONICAL, 'pass', `Canonical URL is ${quoteUntrusted(href)}`);
@@ -181,6 +249,113 @@ export function checkIndexable($: CheerioAPI, headers: Record<string, string> = 
     );
   }
   return makeResult(INDEXABLE, 'pass', 'Page can be indexed by search engines');
+}
+
+export function checkOpenGraph($: CheerioAPI): CheckResult {
+  const missing = ['og:title', 'og:description', 'og:image'].filter(
+    (property) => ($(`meta[property="${property}" i]`).attr('content') ?? '').trim() === '',
+  );
+  if (missing.length === 0) return makeResult(OPEN_GRAPH, 'pass', 'Open Graph tags are set');
+  const remediation = `Add <meta property="..." content="..."> for ${missing.join(', ')} so links to the page get a proper preview.`;
+  if (missing.length === 3) {
+    return makeResult(OPEN_GRAPH, 'fail', 'No Open Graph tags', remediation);
+  }
+  return makeResult(
+    OPEN_GRAPH,
+    'warn',
+    `Missing Open Graph tags: ${missing.join(', ')}`,
+    remediation,
+  );
+}
+
+export function checkStructuredData($: CheerioAPI): CheckResult {
+  const blocks = $('script[type="application/ld+json" i]').toArray();
+  let invalid = 0;
+  for (const block of blocks) {
+    try {
+      const data: unknown = JSON.parse($(block).text());
+      const items = Array.isArray(data) ? data : [data];
+      const valid = items.every((item) => {
+        if (typeof item !== 'object' || item === null) return false;
+        const node = item as Record<string, unknown>;
+        // A @graph document carries @context once at the top and @type on its nodes.
+        return '@type' in node || Array.isArray(node['@graph']);
+      });
+      if (!valid) invalid++;
+    } catch {
+      invalid++;
+    }
+  }
+  if (invalid === 0) {
+    return makeResult(
+      STRUCTURED_DATA,
+      'pass',
+      blocks.length === 0 ? 'No structured data' : `${blocks.length} valid JSON-LD block(s)`,
+    );
+  }
+  return makeResult(
+    STRUCTURED_DATA,
+    'fail',
+    `${invalid} of ${blocks.length} JSON-LD blocks are invalid (not JSON or missing @type)`,
+    'Fix the JSON syntax and give each JSON-LD object an @context and @type; validate at validator.schema.org.',
+  );
+}
+
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i;
+
+export function checkHreflang($: CheerioAPI): CheckResult {
+  const bad: string[] = [];
+  $('link[rel~="alternate" i][hreflang]').each((_, el) => {
+    const lang = ($(el).attr('hreflang') ?? '').trim();
+    const href = ($(el).attr('href') ?? '').trim();
+    let absolute = false;
+    try {
+      const protocol = new URL(href).protocol;
+      absolute = protocol === 'http:' || protocol === 'https:';
+    } catch {
+      // Relative or empty.
+    }
+    if (!absolute || (lang.toLowerCase() !== 'x-default' && !LANGUAGE_TAG.test(lang))) {
+      bad.push(lang);
+    }
+  });
+  if (bad.length === 0) return makeResult(HREFLANG, 'pass', 'hreflang annotations are valid');
+  return makeResult(
+    HREFLANG,
+    'fail',
+    `Invalid hreflang annotation(s): ${bad.map((b) => quoteUntrusted(b)).join(', ')}`,
+    'Use language tags such as "en" or "sv-SE" (or "x-default") with an absolute href.',
+  );
+}
+
+export function checkCharset($: CheerioAPI, headers: Record<string, string> = {}): CheckResult {
+  const fromHeader = /charset\s*=/i.test(headers['content-type'] ?? '');
+  const fromMeta =
+    $('meta[charset]').length > 0 ||
+    $('meta[http-equiv="content-type" i]').filter((_, el) =>
+      /charset/i.test($(el).attr('content') ?? ''),
+    ).length > 0;
+  if (fromHeader || fromMeta) return makeResult(CHARSET, 'pass', 'Character encoding is declared');
+  return makeResult(
+    CHARSET,
+    'fail',
+    'No character encoding declared',
+    'Add <meta charset="utf-8"> early in the <head> (within the first 1024 bytes).',
+  );
+}
+
+export function checkDoctype($: CheerioAPI): CheckResult {
+  const node = $.root()
+    .contents()
+    .toArray()
+    .find((n) => n.type === 'directive');
+  const data = node && 'data' in node ? String(node.data).trim() : '';
+  if (/^!doctype\s+html\s*$/i.test(data)) {
+    return makeResult(DOCTYPE, 'pass', 'Document has the HTML5 doctype');
+  }
+  const remediation = 'Start the document with <!DOCTYPE html> to avoid quirks mode.';
+  if (data === '') return makeResult(DOCTYPE, 'fail', 'Missing doctype (quirks mode)', remediation);
+  return makeResult(DOCTYPE, 'warn', `Non-standard doctype (${quoteUntrusted(data)})`, remediation);
 }
 
 function looksLikeHtml(response: TextResponse): boolean {
@@ -270,15 +445,20 @@ export interface SeoInput extends PageInput {
 
 /** Checks that apply to every analysed page. */
 export function runSeoPageChecks(
-  page: PageInput & { headers?: Record<string, string> },
+  page: PageInput & { headers?: Record<string, string>; finalUrl?: string },
 ): CheckResult[] {
   return [
     safeRunPage(TITLE, page, checkTitle),
     safeRunPage(META_DESCRIPTION, page, checkMetaDescription),
     safeRunPage(H1, page, checkH1),
-    safeRunPage(CANONICAL, page, checkCanonical),
+    safeRunPage(CANONICAL, page, ($) => checkCanonical($, page.finalUrl)),
     safeRunPage(VIEWPORT, page, checkViewport),
     safeRunPage(INDEXABLE, page, ($) => checkIndexable($, page.headers)),
+    safeRunPage(OPEN_GRAPH, page, checkOpenGraph),
+    safeRunPage(STRUCTURED_DATA, page, checkStructuredData),
+    safeRunPage(HREFLANG, page, checkHreflang),
+    safeRunPage(CHARSET, page, ($) => checkCharset($, page.headers)),
+    safeRunPage(DOCTYPE, page, checkDoctype),
   ];
 }
 
@@ -287,6 +467,18 @@ export function runSeoSiteChecks(input: Pick<SeoInput, 'robots' | 'sitemap'>): C
   return [
     safeRun(ROBOTS, () => checkRobotsTxt(input.robots)),
     safeRun(SITEMAP, () => checkSitemap(input.sitemap)),
+  ];
+}
+
+/** Checks that compare the analysed pages with each other; `pages` has one entry per analysed page. */
+export function runSeoCrossPageChecks(
+  pages: { title: string; description: string }[],
+): CheckResult[] {
+  return [
+    safeRun(DUPLICATE_TITLES, () => checkDuplicateTitles(pages.map((p) => p.title))),
+    safeRun(DUPLICATE_DESCRIPTIONS, () =>
+      checkDuplicateDescriptions(pages.map((p) => p.description)),
+    ),
   ];
 }
 

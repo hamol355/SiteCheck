@@ -1,7 +1,7 @@
 import { quoteUntrusted } from '../text.js';
 import type { CheerioAPI } from 'cheerio';
 import { makeResult, safeRun, safeRunPage, type PageInput } from './run.js';
-import type { CheckDefinition, CheckResult, FetchedPage, TlsProbe } from './types.js';
+import type { CheckDefinition, CheckResult, FetchedPage, TextResponse, TlsProbe } from './types.js';
 
 /** Fewer days left than this on the certificate is a warning. */
 export const TLS_WARN_DAYS = 30;
@@ -46,6 +46,11 @@ const TLS_CERTIFICATE = def('tls-certificate', 8);
 const CLICKJACKING = def('clickjacking', 5);
 const COOKIE_FLAGS = def('cookie-flags', 4);
 const MIXED_CONTENT = def('mixed-content', 5);
+const SRI = def('subresource-integrity', 3);
+const FORM_ACTION = def('form-action-https', 3);
+const INFO_DISCLOSURE = def('info-disclosure', 2);
+const CROSS_ORIGIN_ISOLATION = def('cross-origin-isolation', 2);
+const SECURITY_TXT = def('security-txt', 1);
 
 /** Returns the trimmed header value, or undefined if missing or blank. */
 function header(headers: Headers, name: string): string | undefined {
@@ -535,11 +540,149 @@ export function checkMixedContent($: CheerioAPI, headers: Headers, finalUrl: str
   return makeResult(MIXED_CONTENT, 'pass', 'No resources are loaded over HTTP');
 }
 
+/** `<base href>` if valid, otherwise the page URL. */
+function baseUrl($: CheerioAPI, pageUrl: URL): URL {
+  const baseHref = $('base[href]').first().attr('href')?.trim();
+  if (baseHref) {
+    try {
+      return new URL(baseHref, pageUrl);
+    } catch {
+      // An invalid <base href> is ignored by browsers.
+    }
+  }
+  return pageUrl;
+}
+
+export function checkSubresourceIntegrity($: CheerioAPI, finalUrl: string): CheckResult {
+  const pageUrl = new URL(finalUrl);
+  const base = baseUrl($, pageUrl);
+  const missing: string[] = [];
+  let crossOrigin = 0;
+  const elements = $('script[src], link[rel~="stylesheet" i][href]').toArray();
+  for (const el of elements) {
+    const raw = ($(el).attr('src') ?? $(el).attr('href') ?? '').trim();
+    let url: URL;
+    try {
+      url = new URL(raw, base);
+    } catch {
+      continue;
+    }
+    if (!/^https?:$/.test(url.protocol) || url.origin === pageUrl.origin) continue;
+    crossOrigin++;
+    if (($(el).attr('integrity') ?? '').trim() === '') missing.push(url.href);
+  }
+  if (missing.length === 0) {
+    return makeResult(
+      SRI,
+      'pass',
+      crossOrigin === 0
+        ? 'No cross-origin scripts or stylesheets'
+        : 'All cross-origin scripts and stylesheets have integrity hashes',
+    );
+  }
+  return makeResult(
+    SRI,
+    missing.length / crossOrigin > 0.5 ? 'fail' : 'warn',
+    `${missing.length} of ${crossOrigin} cross-origin scripts/stylesheets lack an integrity attribute, e.g. ${quoteUntrusted(missing[0]!)}`,
+    'Add integrity="sha384-..." and crossorigin="anonymous" to third-party <script> and <link rel="stylesheet"> tags, or host the files yourself.',
+  );
+}
+
+export function checkFormActionHttps($: CheerioAPI, finalUrl: string): CheckResult {
+  const pageUrl = new URL(finalUrl);
+  if (pageUrl.protocol !== 'https:') {
+    return makeResult(
+      FORM_ACTION,
+      'skip',
+      'Skipped form-action-https: page is not served over HTTPS',
+    );
+  }
+  const base = baseUrl($, pageUrl);
+  const insecure: string[] = [];
+  $('form[action]').each((_, el) => {
+    try {
+      const url = new URL(($(el).attr('action') ?? '').trim(), base);
+      if (url.protocol === 'http:') insecure.push(url.href);
+    } catch {
+      // Unparseable actions submit nowhere useful.
+    }
+  });
+  if (insecure.length === 0) {
+    return makeResult(FORM_ACTION, 'pass', 'No form submits over HTTP');
+  }
+  return makeResult(
+    FORM_ACTION,
+    'fail',
+    `${insecure.length} form(s) submit over HTTP, e.g. ${quoteUntrusted(insecure[0]!)}`,
+    'Change the form action to an https:// URL; data sent over HTTP can be read and changed in transit.',
+  );
+}
+
+export function checkInfoDisclosure(headers: Headers): CheckResult {
+  const leaks: string[] = [];
+  const server = header(headers, 'server');
+  if (server && /\d/.test(server)) leaks.push(`Server: ${server}`);
+  const poweredBy = header(headers, 'x-powered-by');
+  if (poweredBy) leaks.push(`X-Powered-By: ${poweredBy}`);
+  if (leaks.length === 0) {
+    return makeResult(INFO_DISCLOSURE, 'pass', 'No software versions are exposed in headers');
+  }
+  return makeResult(
+    INFO_DISCLOSURE,
+    'warn',
+    `Headers reveal server software: ${quoteUntrusted(leaks.join(', '))}`,
+    'Remove X-Powered-By and hide version numbers from the Server header (e.g. "server_tokens off;" in nginx).',
+  );
+}
+
+export function checkCrossOriginIsolation(headers: Headers): CheckResult {
+  if (header(headers, 'cross-origin-opener-policy')) {
+    return makeResult(CROSS_ORIGIN_ISOLATION, 'pass', 'Cross-Origin-Opener-Policy is set');
+  }
+  return makeResult(
+    CROSS_ORIGIN_ISOLATION,
+    'warn',
+    'Cross-Origin-Opener-Policy header is missing',
+    'Add "Cross-Origin-Opener-Policy: same-origin" to isolate the page from windows opened by other sites.',
+  );
+}
+
+/** `response` is null when /.well-known/security.txt was not requested (disallowed by robots.txt). */
+export function checkSecurityTxt(response: TextResponse | null, now = new Date()): CheckResult {
+  if (response === null) {
+    return makeResult(SECURITY_TXT, 'skip', 'Skipped security-txt: robots.txt disallows the file');
+  }
+  const remediation =
+    'Publish /.well-known/security.txt with Contact: and Expires: fields (see securitytxt.org) so researchers know how to report vulnerabilities.';
+  const isHtml =
+    response.contentType?.toLowerCase().includes('text/html') === true ||
+    /^\s*<(!doctype|html)/i.test(response.body);
+  if (response.status !== 200 || isHtml) {
+    return makeResult(SECURITY_TXT, 'fail', 'No security.txt found', remediation);
+  }
+  const field = (name: string) =>
+    new RegExp(`^\\s*${name}\\s*:\\s*(\\S.*)$`, 'im').exec(response.body)?.[1]?.trim();
+  if (!field('contact')) {
+    return makeResult(SECURITY_TXT, 'warn', 'security.txt has no Contact field', remediation);
+  }
+  const expires = field('expires');
+  const expiry = expires ? new Date(expires) : null;
+  if (!expiry || Number.isNaN(expiry.getTime())) {
+    return makeResult(SECURITY_TXT, 'warn', 'security.txt has no valid Expires field', remediation);
+  }
+  if (expiry.getTime() <= now.getTime()) {
+    return makeResult(SECURITY_TXT, 'warn', 'security.txt has expired', remediation);
+  }
+  return makeResult(SECURITY_TXT, 'pass', 'security.txt found with Contact and a future Expires');
+}
+
 export interface SecuritySiteInput extends SecurityInput {
   setCookies: string[];
   /** Null when the handshake was not attempted (e.g. plain HTTP). */
   tls: TlsProbe | null;
   now?: Date;
+  /** /.well-known/security.txt, or null when it was not requested. */
+  securityTxt?: TextResponse | null;
 }
 
 /** Security checks of the page's headers and connection, run once for the site. */
@@ -555,6 +698,9 @@ export function runSecurityChecks(page: SecuritySiteInput): CheckResult[] {
     safeRun(TLS_CERTIFICATE, () => checkTlsCertificate(page.tls, finalUrl, page.now)),
     safeRun(CLICKJACKING, () => checkClickjacking(headers)),
     safeRun(COOKIE_FLAGS, () => checkCookieFlags(page.setCookies, finalUrl)),
+    safeRun(INFO_DISCLOSURE, () => checkInfoDisclosure(headers)),
+    safeRun(CROSS_ORIGIN_ISOLATION, () => checkCrossOriginIsolation(headers)),
+    safeRun(SECURITY_TXT, () => checkSecurityTxt(page.securityTxt ?? null, page.now)),
   ];
 }
 
@@ -562,5 +708,7 @@ export function runSecurityChecks(page: SecuritySiteInput): CheckResult[] {
 export function runSecurityPageChecks(page: PageInput & SecurityInput): CheckResult[] {
   return [
     safeRunPage(MIXED_CONTENT, page, ($) => checkMixedContent($, page.headers, page.finalUrl)),
+    safeRunPage(SRI, page, ($) => checkSubresourceIntegrity($, page.finalUrl)),
+    safeRunPage(FORM_ACTION, page, ($) => checkFormActionHttps($, page.finalUrl)),
   ];
 }

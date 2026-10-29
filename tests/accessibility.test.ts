@@ -7,7 +7,11 @@ import {
   checkButtonName,
   checkFormLabel,
   checkHeadingStructure,
+  checkDuplicateId,
+  checkEmptyHeading,
   checkHtmlLang,
+  checkListStructure,
+  checkSkipLink,
   checkHtmlLangValid,
   checkIframeTitle,
   checkImageAlt,
@@ -380,6 +384,10 @@ describe('runAccessibilityChecks', () => {
     'html-lang-valid',
     'image-alt',
     'heading-structure',
+    'empty-heading',
+    'skip-link',
+    'list-structure',
+    'duplicate-id',
     'link-name',
     'button-name',
     'form-label',
@@ -399,7 +407,7 @@ describe('runAccessibilityChecks', () => {
     expect(results.map((r) => r.id)).toEqual(ids);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
     expect(results.every((r) => r.category === 'accessibility')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(47);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(53);
   });
 
   it('gives every result a WCAG reference', () => {
@@ -417,6 +425,10 @@ describe('runAccessibilityChecks', () => {
       'html-lang-valid': 'skip',
       'image-alt': 'fail',
       'heading-structure': 'warn',
+      'empty-heading': 'pass',
+      'skip-link': 'skip',
+      'list-structure': 'pass',
+      'duplicate-id': 'pass',
       'link-name': 'fail',
       'button-name': 'fail',
       'form-label': 'fail',
@@ -455,5 +467,73 @@ describe('runAccessibilityChecks', () => {
       const results = runAccessibilityChecks({ $: load(html), status: 200 });
       expect(results.some((r) => r.status === 'error')).toBe(false);
     }
+  });
+});
+
+describe('empty-heading', () => {
+  it.each([
+    ['<h1>Title</h1>', 'pass'],
+    ['<h2><img src="a.png" alt="Logo"></h2>', 'pass'],
+    ['<div role="heading" aria-level="2" aria-label="Named"></div>', 'pass'],
+    ['<h1></h1>', 'fail'],
+    ['<h2>  <span> </span></h2>', 'fail'],
+    ['<h3 aria-hidden="true"></h3>', 'pass'],
+    ['<div role="heading"></div>', 'fail'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkEmptyHeading(load(html)).status).toBe(status);
+  });
+});
+
+describe('skip-link', () => {
+  it.each([
+    ['<a href="#main">Skip</a><main id="main"></main>', 'pass'],
+    ['<a href="#nope">Skip</a><main id="main"></main>', 'warn'],
+    ['<a href="/home">Home</a><a href="#main">Skip</a><main id="main"></main>', 'warn'],
+    ['<main id="main"><a href="/x">x</a></main>', 'warn'],
+    ['<a href="/x">x</a><p>no main</p>', 'skip'],
+    ['<a href="#main" tabindex="-1">Hidden</a><a href="#c">Skip</a><main id="c"></main>', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkSkipLink(load(html)).status).toBe(status);
+  });
+});
+
+describe('list-structure', () => {
+  it.each([
+    ['<ul><li>a</li><li>b</li></ul>', 'pass'],
+    ['<ol><li>a</li><script></script><template></template></ol>', 'pass'],
+    ['<menu><li>a</li></menu>', 'pass'],
+    ['<ul><div>a</div></ul>', 'fail'],
+    ['<ul>text<li>a</li></ul>', 'pass'],
+    ['<div><li>orphan</li></div>', 'fail'],
+    ['<div role="list"><li>a</li></div>', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkListStructure(load(html)).status).toBe(status);
+  });
+});
+
+describe('duplicate-id', () => {
+  it.each([
+    ['<label for="a">A</label><input id="a"><input id="a">', 'fail'],
+    ['<div id="x" aria-labelledby="l"></div><span id="l"></span><p id="l"></p>', 'fail'],
+    ['<div aria-describedby="d"></div><p id="d"></p>', 'pass'],
+    ['<p id="same"></p><p id="same"></p>', 'pass'],
+    ['<label for="a">A</label><input id="a">', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkDuplicateId(load(html)).status).toBe(status);
+  });
+});
+
+describe('image-alt on other image elements', () => {
+  it.each([
+    ['<input type="image" alt="Go">', 'pass'],
+    ['<input type="image">', 'fail'],
+    ['<map><area href="/a" alt="A"></map>', 'pass'],
+    ['<map><area href="/a"></map>', 'fail'],
+    ['<svg role="img" aria-label="Chart"></svg>', 'pass'],
+    ['<svg role="img"><title>Chart</title></svg>', 'pass'],
+    ['<svg role="img"></svg>', 'fail'],
+    ['<svg></svg>', 'pass'],
+  ])('%s -> %s', (html, status) => {
+    expect(checkImageAlt(load(html)).status).toBe(status);
   });
 });
