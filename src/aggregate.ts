@@ -15,6 +15,8 @@ export const PASS_SUMMARIES: Readonly<Record<string, string>> = {
   'canonical-url': 'Canonical URL is set',
   'viewport-meta': 'Viewport meta tag is set',
   'html-lang': 'Document language is set',
+  'html-lang-valid': 'Document language tag is valid',
+  indexable: 'Pages can be indexed',
   'image-alt': 'Images have alt attributes',
   'heading-structure': 'Heading levels are in order',
   'link-name': 'Links have accessible names',

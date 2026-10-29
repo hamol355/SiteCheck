@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkCanonical,
   checkH1,
+  checkIndexable,
   checkMetaDescription,
   checkRobotsTxt,
   checkSitemap,
@@ -194,6 +195,55 @@ describe('viewport-meta', () => {
   });
 });
 
+describe('indexable', () => {
+  const page = (head: string) => load(`<html><head>${head}</head></html>`);
+
+  it('passes without robots directives, or with index/follow', () => {
+    expect(checkIndexable(page('')).status).toBe('pass');
+    expect(checkIndexable(page('<meta name="robots" content="index, follow">')).status).toBe(
+      'pass',
+    );
+  });
+
+  it('fails on noindex or none in the meta tag', () => {
+    expect(checkIndexable(page('<meta name="robots" content="noindex, follow">')).status).toBe(
+      'fail',
+    );
+    expect(checkIndexable(page('<meta name="ROBOTS" content="None">')).status).toBe('fail');
+    expect(
+      checkIndexable(page('<meta name="robots" content="noindex">')).remediation,
+    ).toBeDefined();
+  });
+
+  it('fails on noindex in X-Robots-Tag', () => {
+    expect(checkIndexable(page(''), { 'x-robots-tag': 'noindex' }).status).toBe('fail');
+    expect(checkIndexable(page(''), { 'x-robots-tag': 'nofollow, noindex' }).status).toBe('fail');
+  });
+
+  it('warns on nofollow without noindex', () => {
+    expect(checkIndexable(page('<meta name="robots" content="nofollow">')).status).toBe('warn');
+    expect(checkIndexable(page(''), { 'x-robots-tag': 'nofollow' }).status).toBe('warn');
+  });
+
+  it('ignores directives for a specific crawler and meta name=googlebot', () => {
+    expect(checkIndexable(page(''), { 'x-robots-tag': 'googlebot: noindex' }).status).toBe('pass');
+    expect(checkIndexable(page('<meta name="googlebot" content="noindex">')).status).toBe('pass');
+  });
+
+  it('keeps a crawler scope across comma-joined headers but resets on a new prefix', () => {
+    const joined = 'googlebot: noindex, nofollow, bingbot: noarchive';
+    expect(checkIndexable(page(''), { 'x-robots-tag': joined }).status).toBe('pass');
+    expect(
+      checkIndexable(page(''), { 'x-robots-tag': 'googlebot: nofollow, all: noindex' }).status,
+    ).toBe('fail');
+  });
+
+  it('does not mistake unavailable_after for a crawler prefix', () => {
+    const header = { 'x-robots-tag': 'unavailable_after: 25 Jun 2030 15:00:00 PST' };
+    expect(checkIndexable(page(''), header).status).toBe('pass');
+  });
+});
+
 describe('runSeoChecks', () => {
   const ok = text({ body: '<urlset></urlset>' });
 
@@ -210,11 +260,12 @@ describe('runSeoChecks', () => {
       'h1',
       'canonical-url',
       'viewport-meta',
+      'indexable',
       'robots-txt',
       'sitemap-xml',
     ]);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(25);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(30);
   });
 
   it('reports a bad page', () => {
@@ -257,6 +308,7 @@ describe('runSeoChecks', () => {
       h1: 'skip',
       'canonical-url': 'skip',
       'viewport-meta': 'skip',
+      indexable: 'skip',
       'robots-txt': 'pass',
       'sitemap-xml': 'pass',
     });

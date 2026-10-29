@@ -3,6 +3,7 @@ import {
   checkHttpStatus,
   checkHttpsRedirect,
   checkResponseTime,
+  checkSoft404,
   runAvailabilityChecks,
 } from '../src/checks/availability.js';
 import { makeResult, safeRun } from '../src/checks/run.js';
@@ -64,6 +65,29 @@ describe('response-time', () => {
   });
 });
 
+describe('soft-404', () => {
+  const probe = (status: number | null) => ({ url: 'https://example.com/x', status });
+
+  it.each([404, 410])('passes on %i', (status) => {
+    expect(checkSoft404(probe(status)).status).toBe('pass');
+  });
+
+  it('fails on 200 with remediation', () => {
+    const r = checkSoft404(probe(200));
+    expect(r.status).toBe('fail');
+    expect(r.remediation).toBeDefined();
+  });
+
+  it.each([301, 302, 403, 500])('warns on %i', (status) => {
+    expect(checkSoft404(probe(status)).status).toBe('warn');
+  });
+
+  it('skips when the request failed or was disallowed by robots.txt', () => {
+    expect(checkSoft404(probe(null)).status).toBe('skip');
+    expect(checkSoft404(null).status).toBe('skip');
+  });
+});
+
 describe('runAvailabilityChecks', () => {
   it('returns one result per check', () => {
     const results = runAvailabilityChecks(page(), {
@@ -72,7 +96,12 @@ describe('runAvailabilityChecks', () => {
       location: 'https://example.com/',
       redirects: [],
     });
-    expect(results.map((r) => r.id)).toEqual(['http-status', 'response-time', 'https-redirect']);
+    expect(results.map((r) => r.id)).toEqual([
+      'http-status',
+      'response-time',
+      'https-redirect',
+      'soft-404',
+    ]);
     expect(results.every((r) => r.category === 'availability')).toBe(true);
   });
 });

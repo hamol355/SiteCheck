@@ -49,6 +49,14 @@
       "remediation": "Redirect all http:// requests to https:// with a 301 response (e.g. \"return 301 https://$host$request_uri;\" in nginx)."
     },
     {
+      "id": "soft-404",
+      "category": "availability",
+      "status": "pass",
+      "message": "Missing pages respond with HTTP 404",
+      "points": 4,
+      "maxPoints": 4
+    },
+    {
       "id": "https",
       "category": "security",
       "status": "fail",
@@ -174,6 +182,14 @@
       "maxPoints": 5
     },
     {
+      "id": "indexable",
+      "category": "seo",
+      "status": "pass",
+      "message": "Page can be indexed by search engines",
+      "points": 5,
+      "maxPoints": 5
+    },
+    {
       "id": "robots-txt",
       "category": "seo",
       "status": "pass",
@@ -196,6 +212,15 @@
       "message": "Document language is \"en\"",
       "points": 5,
       "maxPoints": 5,
+      "wcag": ["3.1.1"]
+    },
+    {
+      "id": "html-lang-valid",
+      "category": "accessibility",
+      "status": "pass",
+      "message": "Language tag \"en\" is well-formed",
+      "points": 2,
+      "maxPoints": 2,
       "wcag": ["3.1.1"]
     },
     {

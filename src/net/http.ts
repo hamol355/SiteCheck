@@ -1,6 +1,12 @@
 import { connect, type TLSSocket } from 'node:tls';
 import { isIP } from 'node:net';
-import type { FetchedPage, HttpRedirectProbe, TextResponse, TlsProbe } from '../checks/types.js';
+import type {
+  FetchedPage,
+  HttpRedirectProbe,
+  StatusProbe,
+  TextResponse,
+  TlsProbe,
+} from '../checks/types.js';
 import { quoteUntrusted } from '../text.js';
 import { USER_AGENT } from '../version.js';
 
@@ -353,6 +359,24 @@ export async function probeHttpRedirect(
     return { url, status: null, location: null, redirects };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** GETs a URL once without following redirects and discards the body. Never throws. */
+export async function probeStatus(
+  url: string,
+  options: { timeoutMs?: number } = {},
+): Promise<StatusProbe> {
+  try {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(options.timeoutMs ?? PROBE_TIMEOUT_MS),
+      headers: { 'user-agent': USER_AGENT },
+    });
+    await response.body?.cancel().catch(() => undefined);
+    return { url, status: response.status };
+  } catch {
+    return { url, status: null };
   }
 }
 

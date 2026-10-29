@@ -8,6 +8,7 @@ import {
   checkFormLabel,
   checkHeadingStructure,
   checkHtmlLang,
+  checkHtmlLangValid,
   checkIframeTitle,
   checkImageAlt,
   checkLandmarks,
@@ -346,9 +347,37 @@ describe('media-autoplay', () => {
   });
 });
 
+describe('html-lang-valid', () => {
+  const status = (lang: string) => checkHtmlLangValid(load(`<html lang="${lang}"></html>`)).status;
+
+  it.each([
+    'en',
+    'sv-SE',
+    'zh-Hant-TW',
+    'es-419',
+    'de-CH-1996',
+    'en-u-ca-gregory',
+    'x-private',
+    'EN-us',
+  ])('passes %s', (lang) => expect(status(lang)).toBe('pass'));
+
+  it.each(['english', 'en_US', 'e', 'en--US', 'en-', 'sv SE', '123'])('fails %s', (lang) =>
+    expect(status(lang)).toBe('fail'),
+  );
+
+  it('skips a missing lang so html-lang is not repeated', () => {
+    expect(checkHtmlLangValid(load('<html></html>')).status).toBe('skip');
+  });
+
+  it('gives remediation on failure', () => {
+    expect(checkHtmlLangValid(load('<html lang="english"></html>')).remediation).toMatch(/BCP 47/);
+  });
+});
+
 describe('runAccessibilityChecks', () => {
   const ids = [
     'html-lang',
+    'html-lang-valid',
     'image-alt',
     'heading-structure',
     'link-name',
@@ -370,7 +399,7 @@ describe('runAccessibilityChecks', () => {
     expect(results.map((r) => r.id)).toEqual(ids);
     expect(results.every((r) => r.status === 'pass')).toBe(true);
     expect(results.every((r) => r.category === 'accessibility')).toBe(true);
-    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(45);
+    expect(results.reduce((s, r) => s + r.maxPoints, 0)).toBe(47);
   });
 
   it('gives every result a WCAG reference', () => {
@@ -385,6 +414,7 @@ describe('runAccessibilityChecks', () => {
     );
     expect(status).toEqual({
       'html-lang': 'fail',
+      'html-lang-valid': 'skip',
       'image-alt': 'fail',
       'heading-structure': 'warn',
       'link-name': 'fail',

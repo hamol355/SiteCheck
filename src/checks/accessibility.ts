@@ -18,6 +18,7 @@ const def = (id: string, maxPoints: number, wcag: string[]): CheckDefinition => 
 });
 
 const LANG = def('html-lang', 5, ['3.1.1']);
+const LANG_VALID = def('html-lang-valid', 2, ['3.1.1']);
 const IMAGE_ALT = def('image-alt', 6, ['1.1.1']);
 const HEADINGS = def('heading-structure', 4, ['1.3.1']);
 const LINK_NAME = def('link-name', 4, ['2.4.4', '4.1.2']);
@@ -159,6 +160,25 @@ function hasAttributeName($: CheerioAPI, el: Selection): boolean {
 /** Name of a link or button: its content or the shared attributes. */
 function hasContentName($: CheerioAPI, el: Selection): boolean {
   return normalizeText(contentText($, el)) !== '' || hasAttributeName($, el);
+}
+
+/** Syntax of a BCP 47 language tag; there is no registry lookup, so unknown codes pass. */
+const BCP47 =
+  /^(?:[a-z]{2,3}(?:-[a-z]{3}){0,3})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|\d{3}))?(?:-(?:[a-z0-9]{5,8}|\d[a-z0-9]{3}))*(?:-[a-wyz0-9](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?$|^x(?:-[a-z0-9]{1,8})+$/i;
+
+export function checkHtmlLangValid($: CheerioAPI): CheckResult {
+  const lang = ($('html').first().attr('lang') ?? '').trim();
+  // A missing lang is html-lang's finding; do not penalise it twice.
+  if (lang === '') return makeResult(LANG_VALID, 'skip', 'No lang attribute to validate');
+  if (BCP47.test(lang)) {
+    return makeResult(LANG_VALID, 'pass', `Language tag "${quoteUntrusted(lang)}" is well-formed`);
+  }
+  return makeResult(
+    LANG_VALID,
+    'fail',
+    `Language tag "${quoteUntrusted(lang)}" is not a valid BCP 47 tag`,
+    'Use a BCP 47 tag such as "en" or "sv-SE" (hyphen, not underscore; language code, not the language name).',
+  );
 }
 
 export function checkHtmlLang($: CheerioAPI): CheckResult {
@@ -507,6 +527,7 @@ export function checkMediaAutoplay($: CheerioAPI): CheckResult {
 export function runAccessibilityChecks(page: PageInput): CheckResult[] {
   return [
     safeRunPage(LANG, page, checkHtmlLang),
+    safeRunPage(LANG_VALID, page, checkHtmlLangValid),
     safeRunPage(IMAGE_ALT, page, checkImageAlt),
     safeRunPage(HEADINGS, page, checkHeadingStructure),
     safeRunPage(LINK_NAME, page, checkLinkName),
