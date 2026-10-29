@@ -374,9 +374,9 @@ export async function probeStatus(
       headers: { 'user-agent': USER_AGENT },
     });
     await response.body?.cancel().catch(() => undefined);
-    return { url, status: response.status };
+    return { url, status: response.status, location: response.headers.get('location') };
   } catch {
-    return { url, status: null };
+    return { url, status: null, location: null };
   }
 }
 

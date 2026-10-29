@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs';
+import * as cheerio from 'cheerio';
 import { describe, expect, it } from 'vitest';
 import {
   checkCsp,
   checkContentTypeOptions,
+  checkCrossOriginIsolation,
+  checkFormActionHttps,
+  checkInfoDisclosure,
+  checkSecurityTxt,
+  checkSubresourceIntegrity,
   checkHsts,
   checkHttps,
   checkPermissionsPolicy,
@@ -305,6 +311,12 @@ describe('runSecurityChecks', () => {
       validTo: '2026-12-01T00:00:00.000Z',
     },
     now: NOW,
+    securityTxt: {
+      url: 'https://example.com/.well-known/security.txt',
+      status: 200,
+      contentType: 'text/plain',
+      body: 'Contact: mailto:security@example.com\nExpires: 2030-01-01T00:00:00Z\n',
+    },
   });
 
   it('passes everything with good headers over https', () => {
@@ -319,9 +331,12 @@ describe('runSecurityChecks', () => {
       'tls-certificate',
       'clickjacking',
       'cookie-flags',
+      'info-disclosure',
+      'cross-origin-isolation',
+      'security-txt',
     ]);
     expect(results.filter((r) => r.status !== 'pass').map((r) => r.id)).toEqual([]);
-    expect(results.reduce((sum, r) => sum + r.maxPoints, 0)).toBe(57);
+    expect(results.reduce((sum, r) => sum + r.maxPoints, 0)).toBe(62);
   });
 
   it('gives failures for no headers over http, except where the check does not apply', () => {
@@ -332,9 +347,10 @@ describe('runSecurityChecks', () => {
       tls: null,
     });
     const ids = (status: string) => results.filter((r) => r.status === status).map((r) => r.id);
-    expect(ids('skip')).toEqual(['tls-certificate']);
-    expect(ids('pass')).toEqual(['cookie-flags']);
-    expect(ids('fail')).toHaveLength(results.length - 2);
+    expect(ids('skip')).toEqual(['tls-certificate', 'security-txt']);
+    expect(ids('pass')).toEqual(['cookie-flags', 'info-disclosure']);
+    expect(ids('warn')).toEqual(['cross-origin-isolation']);
+    expect(ids('fail')).toHaveLength(results.length - 5);
     expect(results.filter((r) => r.status === 'fail').every((r) => r.remediation)).toBe(true);
   });
 
@@ -343,5 +359,121 @@ describe('runSecurityChecks', () => {
     expect(results.find((r) => r.id === 'https')?.status).toBe('error');
     expect(results.find((r) => r.id === 'tls-certificate')?.status).toBe('error');
     expect(results.find((r) => r.id === 'content-security-policy')?.status).toBe('pass');
+  });
+});
+
+describe('subresource-integrity', () => {
+  const run = (html: string) => checkSubresourceIntegrity(cheerio.load(html), HTTPS_URL);
+
+  it('passes with no cross-origin resources or with integrity on all', () => {
+    expect(run('<script src="/a.js"></script><link rel="stylesheet" href="b.css">').status).toBe(
+      'pass',
+    );
+    expect(
+      run('<script src="https://cdn.example.net/a.js" integrity="sha384-x"></script>').status,
+    ).toBe('pass');
+  });
+
+  it('warns when at most half lack integrity and fails when more do', () => {
+    const withSri = '<script src="https://cdn.example.net/a.js" integrity="sha384-x"></script>';
+    const without = '<link rel="stylesheet" href="https://cdn.example.net/b.css">';
+    expect(run(withSri + without).status).toBe('warn');
+    expect(run(withSri + without + without).status).toBe('fail');
+    expect(run(without).remediation).toBeDefined();
+  });
+
+  it('respects <base href> and ignores same-origin absolute URLs', () => {
+    const base = '<base href="https://cdn.example.net/">';
+    expect(run(base + '<script src="a.js"></script>').status).toBe('fail');
+    expect(run(`<script src="${HTTPS_URL}x.js"></script>`).status).toBe('pass');
+  });
+});
+
+describe('form-action-https', () => {
+  const run = (html: string, url = HTTPS_URL) => checkFormActionHttps(cheerio.load(html), url);
+
+  it('passes for https, relative and missing actions', () => {
+    expect(
+      run('<form action="https://example.com/x"></form><form action="/y"></form><form></form>')
+        .status,
+    ).toBe('pass');
+  });
+
+  it('fails for an http action', () => {
+    expect(run('<form action="http://example.com/x"></form>').status).toBe('fail');
+  });
+
+  it('skips pages not served over https', () => {
+    expect(run('<form action="http://example.com/x"></form>', 'http://example.com/').status).toBe(
+      'skip',
+    );
+  });
+});
+
+describe('info-disclosure', () => {
+  it.each([
+    [{}, 'pass'],
+    [{ server: 'nginx' }, 'pass'],
+    [{ server: 'nginx/1.18.0' }, 'warn'],
+    [{ server: 'Apache/2.4.41 (Ubuntu)' }, 'warn'],
+    [{ 'x-powered-by': 'Express' }, 'warn'],
+    [{ server: 'Apache/2' }, 'warn'],
+    [{ server: 'Jetty(9.4.z-SNAPSHOT)' }, 'warn'],
+    [{ server: 'ECS (dcb/7F84)' }, 'pass'],
+    [{ server: 'tsa_k' }, 'pass'],
+  ])('%j -> %s', (headers, status) => {
+    expect(checkInfoDisclosure(headers).status).toBe(status);
+  });
+});
+
+describe('cross-origin-isolation', () => {
+  it('passes with COOP and warns without', () => {
+    expect(checkCrossOriginIsolation({ 'cross-origin-opener-policy': 'same-origin' }).status).toBe(
+      'pass',
+    );
+    expect(checkCrossOriginIsolation({}).status).toBe('warn');
+  });
+});
+
+describe('security-txt', () => {
+  const now = new Date('2026-06-01T00:00:00Z');
+  const res = (
+    body: string,
+    status: number | null = 200,
+    contentType: string | null = 'text/plain',
+  ) => ({
+    url: 'https://example.com/.well-known/security.txt',
+    status,
+    contentType,
+    body,
+  });
+
+  it('passes with Contact and a future Expires', () => {
+    const r = checkSecurityTxt(
+      res('Contact: mailto:a@example.com\nExpires: 2027-01-01T00:00:00Z'),
+      now,
+    );
+    expect(r.status).toBe('pass');
+  });
+
+  it('warns when Contact or a valid future Expires is missing', () => {
+    expect(checkSecurityTxt(res('Expires: 2027-01-01T00:00:00Z'), now).status).toBe('warn');
+    expect(checkSecurityTxt(res('Contact: mailto:a@example.com'), now).status).toBe('warn');
+    expect(checkSecurityTxt(res('Contact: x\nExpires: soon'), now).status).toBe('warn');
+    expect(checkSecurityTxt(res('Contact: x\nExpires: 2025-01-01T00:00:00Z'), now).status).toBe(
+      'warn',
+    );
+  });
+
+  it('fails when missing, failed or an HTML page', () => {
+    expect(checkSecurityTxt(res('', 404), now).status).toBe('fail');
+    expect(checkSecurityTxt(res('', null, null), now).status).toBe('fail');
+    expect(
+      checkSecurityTxt(res('<!doctype html><html></html>', 200, 'text/html'), now).status,
+    ).toBe('fail');
+  });
+
+  it('skips when not requested', () => {
+    expect(checkSecurityTxt(null, now).status).toBe('skip');
   });
 });

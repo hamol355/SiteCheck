@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import { runAccessibilityChecks } from './checks/accessibility.js';
 import { BLOCK_MESSAGES, detectBlock } from './checks/blocked.js';
-import { runSeoPageChecks } from './checks/seo.js';
+import { pageDescription, pageTitle, runSeoPageChecks } from './checks/seo.js';
 import { runSecurityPageChecks } from './checks/security.js';
 import type { CheckResult, FetchedPage, TextResponse } from './checks/types.js';
 import { fetchPage, type BytesResponse } from './net/http.js';
@@ -21,6 +21,9 @@ export interface PageResult {
   /** Why the page was not analysed. Its `checks` are then empty and it does not affect scoring. */
   skipped?: string;
   checks: CheckResult[];
+  /** Title and meta description (empty if none), for the checks that compare pages. */
+  title?: string;
+  description?: string;
 }
 
 /** Parses the page once. A parse failure must not abort the run; the page checks report it instead. */
@@ -42,10 +45,23 @@ export function analyzePage(
 ): CheckResult[] {
   const input = { $: parse(page.html), status: page.status };
   return [
-    ...runSeoPageChecks(input),
+    ...runSeoPageChecks({
+      ...input,
+      headers: page.headers,
+      finalUrl: page.finalUrl,
+      html: page.html,
+    }),
     ...runAccessibilityChecks(input),
     ...runSecurityPageChecks({ ...input, headers: page.headers, finalUrl: page.finalUrl }),
   ];
+}
+
+/** What the cross-page checks need from a page. Empty strings when the page has none. */
+export function pageFacts(html: string | null): { title: string; description: string } {
+  const $ = parse(html);
+  return $
+    ? { title: pageTitle($), description: pageDescription($) }
+    : { title: '', description: '' };
 }
 
 export const DEAD_PAGE_REMEDIATION =
@@ -81,7 +97,7 @@ export async function fetchAndAnalyzePage(url: string, robots: TextResponse): Pr
     return { url, status: page.status, checks: deadPageChecks(page.status, url) };
   if (page.status < 200 || page.status >= 300) return skip(`Responded with HTTP ${page.status}`);
   if (page.html === null) return skip('Not an HTML page');
-  return { url, status: page.status, checks: analyzePage(page) };
+  return { url, status: page.status, checks: analyzePage(page), ...pageFacts(page.html) };
 }
 
 /** Runs `fn` over `items` with at most `limit` in flight. Results keep the order of `items`. */

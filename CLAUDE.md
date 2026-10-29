@@ -6,7 +6,7 @@ Vägledning för Claude Code i det här repot. Produktspecifikationen finns i [S
 
 SiteCheck är ett CLI-verktyg (TypeScript/Node.js) som tar en URL, kör automatiserade kontroller inom Availability, Security, SEO och HTML (i M7 ersätts HTML av Accessibility), och presenterar en rapport med en score 0–100.
 
-**Status:** Milstolparna M1–M5 i [implementation.md](implementation.md) är klara (CLI, availability-, security-, SEO- och HTML-kontroller, scoring, text-/JSON-output, tester och CI). M6–M8 (blockerade sajter, WCAG-kontroller, flera sidor via sitemap) är också klara. Pågående arbete är M9 (fler kontroller, se avsnitt 5e) och därefter release (M10). Följ milstolparna i implementation.md.
+**Status:** Milstolparna M1–M5 i [implementation.md](implementation.md) är klara (CLI, availability-, security-, SEO- och HTML-kontroller, scoring, text-/JSON-output, tester och CI). M6–M9 (blockerade sajter, WCAG-kontroller, flera sidor via sitemap, fler kontroller enligt avsnitt 5e) är också klara. Nästa steg är release (M10). Följ milstolparna i implementation.md.
 
 ## Kommandon
 

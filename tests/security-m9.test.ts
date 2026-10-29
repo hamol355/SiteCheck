@@ -266,7 +266,11 @@ describe('runSecurityPageChecks', () => {
 
   it('runs mixed-content for the page', () => {
     const results = runSecurityPageChecks(input('<img src="a.png">'));
-    expect(results.map((r) => [r.id, r.status])).toEqual([['mixed-content', 'pass']]);
+    expect(results.map((r) => [r.id, r.status])).toEqual([
+      ['mixed-content', 'pass'],
+      ['subresource-integrity', 'pass'],
+      ['form-action-https', 'pass'],
+    ]);
   });
 
   it('skips error pages and fails non-HTML responses', () => {

@@ -1,6 +1,6 @@
 # Implementationsplan – SiteCheck v1.0.0
 
-> Status 2026-10-29: M1–M8 klara. M9 (fler kontroller, se 5e) läggs till före release. Release (M10) är ett mål, inte en deadline.
+> Status 2026-10-29: M1–M9 klara (M9: fler kontroller, se 5e). Nästa steg är release (M10), ett mål, inte en deadline.
 
 Det här dokumentet bryter ner roadmapen i [SiteCheck.md](SiteCheck.md) till konkreta steg. Regler och konventioner finns i [CLAUDE.md](CLAUDE.md); vid konflikt gäller CLAUDE.md.
 
@@ -475,11 +475,11 @@ Branch: `feature/security-checks`, `feature/seo-checks`, `feature/availability-c
 - [x] `FetchedPage.setCookies: string[]` från `headers.getSetCookie()` (`net/http.ts`) + test med flera `Set-Cookie` och `Expires`
 - [x] `net/http.ts`: `probeTls()` (5 s, läser kedja, giltighet, protokoll) + test mot lokal TLS-testserver med självsignerat cert (utgånget cert och kort giltighet testas på `checkTlsCertificate` med injicerad tid)
 - [x] Fas A: `tls-certificate`, `clickjacking`, `cookie-flags`, `mixed-content` (security, klara på `feature/security-checks`), `indexable`, `soft-404`, `html-lang-valid` (se 5e)
-- [ ] Prober körs parallellt (TLS klar; soft-404 körs parallellt med sitemap-hämtningen eftersom den behöver robots.txt först); en misslyckad probe ger `skip`/`error`, inte avbruten körning
-- [ ] HTML-baserade säkerhetskontroller och `indexable` körs per sida med `--pages`; `PASS_SUMMARIES` för nya ids
-- [ ] Fas B om tid finns: övriga kontroller i 5e, inklusive `duplicate-titles`/`duplicate-descriptions` i `aggregate.ts`
-- [ ] Tester per kontroll med bra/dåliga fixtures; uppdatera `good.html`, `bad.html`, testservern och golden-JSON
-- [ ] README (checks, begränsningar: TLS mot Nodes CA-lager, soft-404-requesten), CHANGELOG-notis om ändrad score
+- [x] Prober körs parallellt (TLS med https-proben och robots.txt; soft-404, security.txt och www-proben parallellt med sitemap-hämtningen eftersom de behöver robots.txt först); en misslyckad probe ger `skip`/`error`, inte avbruten körning
+- [x] HTML-baserade säkerhetskontroller och `indexable` körs per sida med `--pages`; `PASS_SUMMARIES` för nya ids
+- [x] Fas B (klart): övriga kontroller i 5e, inklusive `duplicate-titles`/`duplicate-descriptions` i `aggregate.ts`
+- [x] Tester per kontroll med bra/dåliga fixtures; uppdatera `good.html`, `bad.html`, testservern och golden-JSON
+- [x] README (checks, begränsningar: TLS mot Nodes CA-lager, soft-404-requesten), CHANGELOG-notis om ändrad score (fas A; uppdateras med fas B)
 
 Klart när: fas A finns i rapporten med `remediation`, och `npm test` är grönt.
 

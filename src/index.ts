@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { runAvailabilityChecks } from './checks/availability.js';
+import { runAvailabilityChecks, wwwCounterpart } from './checks/availability.js';
 import { BlockedError, detectBlock, isDisallowedByRobots, robotsNotice } from './checks/blocked.js';
-import { runSeoSiteChecks } from './checks/seo.js';
+import { runSeoCrossPageChecks, runSeoSiteChecks } from './checks/seo.js';
 import { runSecurityChecks } from './checks/security.js';
 import type { Category } from './checks/types.js';
 import { aggregatePages } from './aggregate.js';
@@ -17,6 +17,7 @@ import { fetchRootSitemap } from './net/sitemap.js';
 import {
   analyzeExtraPages,
   analyzePage,
+  pageFacts,
   MAX_PAGES,
   selectExtraPages,
   toPageReport,
@@ -92,15 +93,20 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   const soft404Url = new URL(`/sitecheck-404-${randomBytes(8).toString('hex')}`, page.finalUrl)
     .href;
   // Fetched once: it feeds both the sitemap-xml check and the page selection.
-  const [rootSitemap, soft404] = await Promise.all([
+  const securityTxtUrl = new URL('/.well-known/security.txt', page.finalUrl).href;
+  const wwwUrl = wwwCounterpart(page.finalUrl);
+  const [rootSitemap, soft404, securityTxt, www] = await Promise.all([
     fetchRootSitemap(page.finalUrl, robots),
     isDisallowedByRobots(robots, soft404Url) ? null : probeStatus(soft404Url),
+    isDisallowedByRobots(robots, securityTxtUrl) ? null : fetchText(securityTxtUrl),
+    wwwUrl === null ? null : probeStatus(wwwUrl),
   ]);
 
   const startPage: PageResult = {
     url: page.finalUrl,
     status: page.status,
     checks: analyzePage(page),
+    ...pageFacts(page.html),
   };
   const extraUrls =
     pageCount > 1
@@ -110,10 +116,15 @@ export async function analyze(url: string, options: AnalyzeOptions = {}): Promis
   const pageChecks = aggregatePages(pages);
   const ofCategory = (category: Category) => pageChecks.filter((c) => c.category === category);
   const checks = [
-    ...runAvailabilityChecks(page, probe, soft404),
-    ...runSecurityChecks({ ...page, tls }),
+    ...runAvailabilityChecks(page, probe, soft404, www),
+    ...runSecurityChecks({ ...page, tls, securityTxt }),
     ...ofCategory('security'),
     ...ofCategory('seo'),
+    ...runSeoCrossPageChecks(
+      pages
+        .filter((p) => p.skipped === undefined && p.title !== undefined)
+        .map((p) => ({ title: p.title!, description: p.description ?? '' })),
+    ),
     ...runSeoSiteChecks({ robots, sitemap: bytesToText(rootSitemap) }),
     ...ofCategory('accessibility'),
   ];

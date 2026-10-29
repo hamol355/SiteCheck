@@ -81,4 +81,6 @@ export interface StatusProbe {
   url: string;
   /** Status of the response (redirects are not followed), or null if the request failed. */
   status: number | null;
+  /** `Location` header of the response, if any. */
+  location: string | null;
 }

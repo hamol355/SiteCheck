@@ -3,5 +3,6 @@
   "content-security-policy": "default-src 'self'; img-src 'self' data:",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
-  "permissions-policy": "camera=(), microphone=()"
+  "permissions-policy": "camera=(), microphone=()",
+  "cross-origin-opener-policy": "same-origin"
 }

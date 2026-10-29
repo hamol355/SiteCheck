@@ -1,5 +1,6 @@
 import type { CheerioAPI } from 'cheerio';
 import { quoteUntrusted } from '../text.js';
+import { isLanguageTag } from './language-tag.js';
 import { makeResult, safeRunPage, type PageInput } from './run.js';
 import type { CheckDefinition, CheckResult } from './types.js';
 
@@ -19,6 +20,10 @@ const def = (id: string, maxPoints: number, wcag: string[]): CheckDefinition => 
 
 const LANG = def('html-lang', 5, ['3.1.1']);
 const LANG_VALID = def('html-lang-valid', 2, ['3.1.1']);
+const EMPTY_HEADING = def('empty-heading', 2, ['1.3.1', '2.4.6']);
+const SKIP_LINK = def('skip-link', 1, ['2.4.1']);
+const LIST_STRUCTURE = def('list-structure', 1, ['1.3.1']);
+const DUPLICATE_ID = def('duplicate-id', 2, ['4.1.2']);
 const IMAGE_ALT = def('image-alt', 6, ['1.1.1']);
 const HEADINGS = def('heading-structure', 4, ['1.3.1']);
 const LINK_NAME = def('link-name', 4, ['2.4.4', '4.1.2']);
@@ -162,15 +167,11 @@ function hasContentName($: CheerioAPI, el: Selection): boolean {
   return normalizeText(contentText($, el)) !== '' || hasAttributeName($, el);
 }
 
-/** Syntax of a BCP 47 language tag; there is no registry lookup, so unknown codes pass. */
-const BCP47 =
-  /^(?:[a-z]{2,3}(?:-[a-z]{3}){0,3})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|\d{3}))?(?:-(?:[a-z0-9]{5,8}|\d[a-z0-9]{3}))*(?:-[a-wyz0-9](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?$|^x(?:-[a-z0-9]{1,8})+$/i;
-
 export function checkHtmlLangValid($: CheerioAPI): CheckResult {
   const lang = ($('html').first().attr('lang') ?? '').trim();
   // A missing lang is html-lang's finding; do not penalise it twice.
   if (lang === '') return makeResult(LANG_VALID, 'skip', 'No lang attribute to validate');
-  if (BCP47.test(lang)) {
+  if (isLanguageTag(lang)) {
     return makeResult(LANG_VALID, 'pass', `Language tag "${quoteUntrusted(lang)}" is well-formed`);
   }
   return makeResult(
@@ -196,10 +197,20 @@ export function checkHtmlLang($: CheerioAPI): CheckResult {
 
 export function checkImageAlt($: CheerioAPI): CheckResult {
   const images = $('img');
-  const total = images.length;
+  // Other elements that act as images need a text alternative from alt or the shared name attributes.
+  const named = $('input[type="image" i], area[href], svg[role="img" i]').filter(
+    (_, el) => !isAriaHidden($(el)),
+  );
+  const total = images.length + named.length;
   if (total === 0) return makeResult(IMAGE_ALT, 'pass', 'No images to check');
   // alt="" is valid (decorative image); only a missing attribute counts.
-  const missing = images.filter((_, el) => $(el).attr('alt') === undefined).length;
+  const missingImg = images.filter((_, el) => $(el).attr('alt') === undefined).length;
+  const missingNamed = named.filter((_, el) => {
+    const node = $(el);
+    if (normalizeText(node.attr('alt') ?? '') !== '' || hasAttributeName($, node)) return false;
+    return !(node.is('svg') && normalizeText(node.children('title').text()) !== '');
+  }).length;
+  const missing = missingImg + missingNamed;
   if (missing === 0)
     return makeResult(IMAGE_ALT, 'pass', `All ${total} images have alt attributes`);
   const message = `${missing} ${missing === 1 ? 'image is' : 'images are'} missing alt attributes (of ${total})`;
@@ -524,12 +535,115 @@ export function checkMediaAutoplay($: CheerioAPI): CheckResult {
   );
 }
 
+export function checkEmptyHeading($: CheerioAPI): CheckResult {
+  const headings = $('h1, h2, h3, h4, h5, h6, [role="heading" i]').filter(
+    (_, el) => !isAriaHidden($(el)),
+  );
+  const empty = headings.filter((_, el) => !hasContentName($, $(el))).length;
+  if (empty === 0) {
+    return makeResult(EMPTY_HEADING, 'pass', 'All headings have content');
+  }
+  return makeResult(
+    EMPTY_HEADING,
+    'fail',
+    `${empty} of ${headings.length} headings are empty`,
+    'Give every heading text, or remove the empty heading element; screen reader users navigate by headings.',
+  );
+}
+
+export function checkSkipLink($: CheerioAPI): CheckResult {
+  const hasMain = $('main, [role="main" i]').length > 0;
+  const first = $(FOCUSABLE)
+    .filter((_, el) => {
+      const tabindex = $(el).attr('tabindex');
+      return !(tabindex !== undefined && Number(tabindex) < 0) && !isAriaHidden($(el));
+    })
+    .first();
+  const href = first.is('a[href]') ? (first.attr('href') ?? '').trim() : '';
+  if (href.length > 1 && href.startsWith('#')) {
+    let id = href.slice(1);
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      // Use the raw fragment.
+    }
+    if (elementsById($).has(id)) {
+      return makeResult(SKIP_LINK, 'pass', `First focusable element skips to #${id}`);
+    }
+  }
+  if (!hasMain) {
+    return makeResult(SKIP_LINK, 'skip', 'Skipped skip-link: the page has no <main> to skip to');
+  }
+  return makeResult(
+    SKIP_LINK,
+    'warn',
+    'No skip link before the main content',
+    'Make the first focusable element a link such as <a href="#main">Skip to content</a> that targets the <main> element.',
+  );
+}
+
+export function checkListStructure($: CheerioAPI): CheckResult {
+  const allowedChild = new Set(['li', 'script', 'template']);
+  let problems = 0;
+  $('ul, ol').each((_, list) => {
+    const bad = $(list)
+      .children()
+      .toArray()
+      .some((child) => child.type === 'tag' && !allowedChild.has(child.name.toLowerCase()));
+    if (bad) problems++;
+  });
+  $('li').each((_, item) => {
+    const parent = $(item).parent();
+    if (!parent.is('ul, ol, menu') && !parent.is('[role="list" i]')) problems++;
+  });
+  if (problems === 0) return makeResult(LIST_STRUCTURE, 'pass', 'Lists are structured correctly');
+  return makeResult(
+    LIST_STRUCTURE,
+    'fail',
+    `${problems} list structure problem(s): non-<li> children of <ul>/<ol> or <li> outside a list`,
+    'Put only <li> elements directly inside <ul> and <ol>, and keep every <li> inside a list.',
+  );
+}
+
+const REFERENCING_ATTRIBUTES = ['aria-labelledby', 'aria-describedby', 'aria-controls'];
+
+export function checkDuplicateId($: CheerioAPI): CheckResult {
+  const referenced = new Set<string>();
+  $('label[for]').each((_, el) => {
+    referenced.add(($(el).attr('for') ?? '').trim());
+  });
+  for (const attribute of REFERENCING_ATTRIBUTES) {
+    $(`[${attribute}]`).each((_, el) => {
+      for (const id of idRefs($(el).attr(attribute))) referenced.add(id);
+    });
+  }
+  const counts = new Map<string, number>();
+  for (const node of $('[id]').toArray()) {
+    const id = $(node).attr('id') ?? '';
+    if (referenced.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const duplicates = [...counts.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+  if (duplicates.length === 0) {
+    return makeResult(DUPLICATE_ID, 'pass', 'No duplicate ids among referenced elements');
+  }
+  return makeResult(
+    DUPLICATE_ID,
+    'fail',
+    `${duplicates.length} referenced id(s) are used more than once, e.g. "${quoteUntrusted(duplicates[0]!)}"`,
+    'Make ids unique; labels and ARIA references point at the first match only.',
+  );
+}
+
 export function runAccessibilityChecks(page: PageInput): CheckResult[] {
   return [
     safeRunPage(LANG, page, checkHtmlLang),
     safeRunPage(LANG_VALID, page, checkHtmlLangValid),
     safeRunPage(IMAGE_ALT, page, checkImageAlt),
     safeRunPage(HEADINGS, page, checkHeadingStructure),
+    safeRunPage(EMPTY_HEADING, page, checkEmptyHeading),
+    safeRunPage(SKIP_LINK, page, checkSkipLink),
+    safeRunPage(LIST_STRUCTURE, page, checkListStructure),
+    safeRunPage(DUPLICATE_ID, page, checkDuplicateId),
     safeRunPage(LINK_NAME, page, checkLinkName),
     safeRunPage(BUTTON_NAME, page, checkButtonName),
     safeRunPage(FORM_LABEL, page, checkFormLabel),

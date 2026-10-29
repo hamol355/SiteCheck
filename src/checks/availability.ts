@@ -1,3 +1,4 @@
+import { quoteUntrusted } from '../text.js';
 import { makeResult, safeRun } from './run.js';
 import type {
   CheckDefinition,
@@ -17,6 +18,16 @@ const RESPONSE_TIME: CheckDefinition = {
   maxPoints: 6,
 };
 const SOFT_404: CheckDefinition = { id: 'soft-404', category: 'availability', maxPoints: 4 };
+const REDIRECT_CHAIN: CheckDefinition = {
+  id: 'redirect-chain',
+  category: 'availability',
+  maxPoints: 2,
+};
+const WWW_CONSISTENCY: CheckDefinition = {
+  id: 'www-consistency',
+  category: 'availability',
+  maxPoints: 3,
+};
 const HTTPS_REDIRECT: CheckDefinition = {
   id: 'https-redirect',
   category: 'availability',
@@ -105,6 +116,93 @@ export function checkHttpsRedirect(probe: HttpRedirectProbe): CheckResult {
   );
 }
 
+export function checkRedirectChain(page: Pick<FetchedPage, 'redirects'>): CheckResult {
+  const count = page.redirects.length;
+  if (count <= 1) {
+    return makeResult(
+      REDIRECT_CHAIN,
+      'pass',
+      count === 0 ? 'No redirects to the final URL' : 'One redirect to the final URL',
+    );
+  }
+  const remediation =
+    'Redirect straight to the final URL (e.g. http://example.com directly to https://www.example.com/) instead of in several steps.';
+  const message = `${count} redirects before the final URL`;
+  return makeResult(REDIRECT_CHAIN, count <= 3 ? 'warn' : 'fail', message, remediation);
+}
+
+/**
+ * The host to try for the www/non-www check, or null when it should be skipped. Only `www.x` and
+ * two-label hosts qualify; without a public suffix list other hosts (`example.co.uk`) are not guessed.
+ */
+export function wwwCounterpart(finalUrl: string): string | null {
+  const url = new URL(finalUrl);
+  const host = url.hostname;
+  if (/^[\d.]+$/.test(host) || host.includes(':')) return null;
+  if (host.startsWith('www.')) {
+    url.hostname = host.slice(4);
+  } else if (host.split('.').length === 2) {
+    url.hostname = `www.${host}`;
+  } else {
+    return null;
+  }
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
+/** `probe` is null when the check does not apply (see `wwwCounterpart`). */
+export function checkWwwConsistency(probe: StatusProbe | null, finalUrl: string): CheckResult {
+  if (probe === null) {
+    return makeResult(
+      WWW_CONSISTENCY,
+      'skip',
+      'Skipped www-consistency: no www variant to compare',
+    );
+  }
+  const { status, location } = probe;
+  const host = new URL(probe.url).hostname;
+  const finalHost = new URL(finalUrl).hostname;
+  const remediation = 'Pick one of www and non-www and 301-redirect the other to it.';
+  if (status !== null && status >= 300 && status < 400 && location) {
+    let target: URL | null = null;
+    try {
+      target = new URL(location, probe.url);
+    } catch {
+      // Treated as a redirect that does not lead to the site below.
+    }
+    if (target?.hostname === finalHost) {
+      return makeResult(WWW_CONSISTENCY, 'pass', `${host} redirects to ${finalHost}`);
+    }
+    if (target?.hostname === host) {
+      // The probe does not follow redirects, so where this one ends is unknown.
+      return makeResult(
+        WWW_CONSISTENCY,
+        'skip',
+        `Skipped www-consistency: ${host} redirects within its own host`,
+      );
+    }
+    if (target) {
+      return makeResult(
+        WWW_CONSISTENCY,
+        'warn',
+        `${host} redirects to ${quoteUntrusted(target.hostname)}, not to ${finalHost}`,
+        remediation,
+      );
+    }
+  }
+  if (status !== null && status >= 200 && status < 300) {
+    return makeResult(
+      WWW_CONSISTENCY,
+      'warn',
+      `${host} also serves the site without redirecting to ${finalHost} (duplicate content)`,
+      remediation,
+    );
+  }
+  return makeResult(WWW_CONSISTENCY, 'pass', `${host} does not serve a second copy of the site`);
+}
+
 /** `probe` is null when the random path is disallowed by robots.txt and so was not requested. */
 export function checkSoft404(probe: StatusProbe | null): CheckResult {
   if (probe === null) {
@@ -147,11 +245,14 @@ export function runAvailabilityChecks(
   page: FetchedPage,
   probe: HttpRedirectProbe,
   soft404: StatusProbe | null = null,
+  www: StatusProbe | null = null,
 ): CheckResult[] {
   return [
     safeRun(HTTP_STATUS, () => checkHttpStatus(page)),
     safeRun(RESPONSE_TIME, () => checkResponseTime(page)),
     safeRun(HTTPS_REDIRECT, () => checkHttpsRedirect(probe)),
     safeRun(SOFT_404, () => checkSoft404(soft404)),
+    safeRun(REDIRECT_CHAIN, () => checkRedirectChain(page)),
+    safeRun(WWW_CONSISTENCY, () => checkWwwConsistency(www, page.finalUrl)),
   ];
 }
