@@ -479,7 +479,7 @@ Branch: `feature/security-checks`, `feature/seo-checks`, `feature/availability-c
 - [ ] HTML-baserade säkerhetskontroller och `indexable` körs per sida med `--pages`; `PASS_SUMMARIES` för nya ids
 - [ ] Fas B om tid finns: övriga kontroller i 5e, inklusive `duplicate-titles`/`duplicate-descriptions` i `aggregate.ts`
 - [ ] Tester per kontroll med bra/dåliga fixtures; uppdatera `good.html`, `bad.html`, testservern och golden-JSON
-- [ ] README (checks, begränsningar: TLS mot Nodes CA-lager, soft-404-requesten), CHANGELOG-notis om ändrad score
+- [x] README (checks, begränsningar: TLS mot Nodes CA-lager, soft-404-requesten), CHANGELOG-notis om ändrad score (fas A; uppdateras med fas B)
 
 Klart när: fas A finns i rapporten med `remediation`, och `npm test` är grönt.
 

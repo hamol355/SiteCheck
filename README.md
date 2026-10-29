@@ -41,10 +41,10 @@ The report goes to **stdout**; errors and diagnostics go to **stderr**, so `--fo
 
 | Category     | Checks                                                                                                           |
 | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Availability | `http-status`, `response-time`, `https-redirect`                                                                 |
-| Security     | `https`, `strict-transport-security`, `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy` |
-| SEO          | `title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`, `robots-txt`, `sitemap-xml`                |
-| Accessibility | `html-lang`, `image-alt`, `heading-structure`, `link-name`, `button-name`, `form-label`, `iframe-title`, `landmarks`, `aria-valid`, `zoom-allowed`, `tabindex`, `meta-refresh`, `table-headers`, `autocomplete`, `media-autoplay` |
+| Availability | `http-status`, `response-time`, `https-redirect`, `soft-404`                                                     |
+| Security     | `https`, `strict-transport-security`, `content-security-policy`, `x-content-type-options`, `referrer-policy`, `permissions-policy`, `tls-certificate`, `clickjacking`, `cookie-flags`, `mixed-content` |
+| SEO          | `title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta`, `indexable`, `robots-txt`, `sitemap-xml`   |
+| Accessibility | `html-lang`, `html-lang-valid`, `image-alt`, `heading-structure`, `link-name`, `button-name`, `form-label`, `iframe-title`, `landmarks`, `aria-valid`, `zoom-allowed`, `tabindex`, `meta-refresh`, `table-headers`, `autocomplete`, `media-autoplay` |
 
 Each check ends as `pass`, `warn`, `fail`, `error` (the check itself crashed; other checks are unaffected) or `skip` (the check did not apply). If the page does not respond with 2xx, the checks that read the page content (`title`, `meta-description`, `h1`, `canonical-url`, `viewport-meta` and all accessibility checks) are skipped, since an error or block page says nothing about the real page. `warn` and `fail` come with a `remediation` hint.
 
@@ -120,6 +120,8 @@ The JSON output is a public interface (`schemaVersion` is `1`):
 - Requests time out after 10 s (5 s for `robots.txt`, `sitemap.xml` and the HTTP→HTTPS probe), follow at most 5 redirects, and read at most 2 MB of the page (1 MB for `robots.txt` and the sitemap). Larger pages are analysed truncated; the report then has `meta.truncated: true` and the text output says so.
 - The sitemap check verifies that a sitemap exists and looks like XML; it does not validate its contents.
 - Accessibility checks cover only what static HTML shows. Colour contrast, focus indicators and keyboard traps need a real browser and are not checked, so a good accessibility score does not mean the site is WCAG compliant.
+- `tls-certificate` makes its own TLS handshake (no HTTP request) and validates the chain against Node's built-in CA store. Node does not fetch missing intermediate certificates the way browsers do, so a server that omits them fails here even if browsers accept it.
+- `soft-404` requests one random path (`/sitecheck-404-<random>`) on the site to see whether a missing page answers 404. It is skipped if `robots.txt` disallows the path.
 - Performance and Core Web Vitals are out of scope for v1.
 
 ## Development
